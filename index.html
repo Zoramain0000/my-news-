@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0">
+    <title>zerodays patch // Global Cross-Conn Monitor</title>
+    
+    <!-- PWA Manifest (Inline for simplicity) -->
+    <link rel="manifest" href="data:application/manifest+json;base64,eyJuYW1lIjoiemVyMGF5cyBwYXRjaCIsInNob3J0X25hbWUiOiJXaWx0ZXIgQ29tbWEiLCJzdGFydF91cmwiOiIvIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJmYW1pbHlfbmFtZSI6IlNlZ29lZCBVSSIsImljb25zIjpbeyJzcmMiOiJodHRwczovL3d3dy5mb3JtYXJkZXIuY29tL3NwbGl0bGVzLzY1LzY0IiwiZXhwb3J0SW5pdCI6ImNsb3VkIiwiZ2l2ZW5TdHJpY2ljb25Jbm5lck5hbWUiOiJzbGl0ZXMiLCJpZCI6MTAwMSwiZGF0YSI6eyJsaW5rIjoiZ2V0IFNQTGl0ZXMiLCJjaGVja3MiOnsid2lkdGgiOjY1LCJoZWlnaHQiOjY1fX1dfV0==">
+
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-panel: #1e293b;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #fbbf24;
+            --accent-hover: #f59e0b;
+            --bar-in: #eab308;
+            --bar-out: #3b82f6;
+            --whatsapp: #25D366;
+            --border: #334155;
+            --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: var(--font-main);
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: font-size 0.3s ease;
+            touch-action: manipulation;
+        }
+
+        /* --- Header & Footer Styles --- */
+        header {
+            background-color: var(--accent);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 18px;
+            color: #1e293b;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 10;
+            flex-shrink: 0;
+            flex-grow: 0;
+        }
+
+        .header-center { 
+            display: flex; 
+            gap: 10px; 
+            align-items: center; 
+            flex-wrap: wrap; 
+            justify-content: center;
+        }
+
+        .icon-btn {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            color: #1e293b;
+            padding: 6px 10px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 600;
+        }
+        
+        .icon-btn:hover { 
+            background: rgba(255,255,255,0.4); 
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+        }
+
+        footer {
+            background-color: var(--bg-panel);
+            color: var(--text-muted);
+            padding: 5px 20px;
+            font-size: 12px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        /* --- Main Content --- */
+        main {
+            flex: 1;
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        .panel {
+            background: var(--bg-panel);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            min-height: 0;
+        }
+
+        .panel-header {
+            font-size: 16px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* --- Utility Classes --- */
+        .hidden { display: none !important; }
+        .badge { background: var(--accent); color: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+        
+        .split-section { flex: 2; display: flex; gap: 20px; }
+        .split-panel { flex: 1; overflow-y: auto; flex-direction: column; scrollbar-width: thin; scrollbar-color: var(--border) transparent; min-height: 0; }
+        .split-header { display: flex; justify-content: space-between; padding: 5px 10px; background: rgba(255,255,255,0.05); font-size: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border); cursor: pointer; }
+        .split-header:hover { background: rgba(255,255,255,0.1); }
+        .split-row { display: flex; align-items: center; padding: 8px 5px; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; }
+        .split-row:hover { background: rgba(255,255,255,0.05); }
+        .split-row:last-child { border-bottom: none; }
+        .split-icon { width: 24px; height: 24px; margin-right: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+        .split-info { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .split-bar-container { flex: 1; height: 6px; background: rgba(255,255,255,0.1); margin: 0 10px; border-radius: 2px; overflow: hidden; }
+        .split-bar-fill { height: 100%; width: 0%; transition: width 0.2s; }
+        .split-size { width: 50px; text-align: right; font-family: monospace; font-size: 11px; }
+
+        /* --- Global Connection World (Map) --- */
+        .overview-section { flex: 2; display: flex; flex-direction: row; gap: 20px; }
+        .stats-box { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+        .stat-group { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; }
+        .traffic-circle { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        .traffic-value { font-size: 32px; font-weight: bold; z-index: 1; }
+        .traffic-legend { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+        .traffic-graph-container { flex: 3; display: flex; flex-direction: column; }
+        .graph-title { font-size: 16px; text-align: center; margin-bottom: 10px; color: var(--accent); }
+        .graph-container { flex: 1; position: relative; border-bottom: 2px solid var(--border); margin-bottom: 5px; }
+        .graph-container.incoming { background: linear-gradient(to bottom, #eab308, transparent); }
+        .graph-container.outgoing { background: linear-gradient(to bottom, #3b82f6, transparent); }
+        .graph-labels { font-size: 10px; color: var(--text-muted); display: flex; gap: 10px; margin-top: 5px; }
+
+        /* --- WhatsApp Section (Scrollable) --- */
+        .wa-section { 
+            flex: 1; 
+            background: #0e1c16; 
+            border: 1px solid #25D366; 
+            border-radius: 8px; 
+            padding: 15px; 
+            overflow: hidden; 
+            display: flex; 
+            flex-direction: column;
+            min-height: 150px;
+        }
+        .wa-header { color: var(--whatsapp); font-weight: bold; font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+        .wa-data-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; overflow-y: auto; padding-right: 5px; }
+        .wa-item { background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; font-size: 11px; color: var(--text-main); display: flex; flex-direction: column; }
+        .wa-label { color: var(--text-muted); font-size: 10px; margin-bottom: 2px; }
+        .wa-value { font-family: monospace; color: var(--whatsapp); font-weight: bold; }
+
+        /* --- Keylogger Section (Scrollable) --- */
+        .keylogger-section { 
+            flex: 1; 
+            background: var(--bg-dark); 
+            border: 1px solid #333; 
+            border-radius: 8px; 
+            padding: 15px; 
+            overflow: hidden; 
+            display: flex; 
+            flex-direction: column;
+            min-height: 150px;
+        }
+        .keylogger-header { color: var(--bar-in); font-weight: bold; font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+        .keylogger-box { 
+            flex: 1; 
+            background: rgba(0,0,0,0.3); 
+            border: 1px solid #334155; 
+            border-radius: 4px; 
+            padding: 10px; 
+            font-family: 'Courier New', monospace; 
+            font-size: 12px; 
+            color: var(--accent); 
+            overflow-y: auto; 
+            white-space: pre-wrap; 
+            min-height: 100px;
+        }
+        .keylogger-toggle-btn { margin-top: 5px; background: rgba(255,255,255,0.1); border: 1px solid var(--text-muted); color: var(--text-main); padding: 4px 8px; font-size: 11px; cursor: pointer; border-radius: 4px; }
+        .keylogger-toggle-btn:hover { background: var(--accent); color: #1e293b; }
+
+        /* --- Inspect Section (Fixed & Enhanced) --- */
+        .inspect-section { flex: 1; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 15px; overflow: hidden; display: flex; flex-direction: column; }
+        .filter-bar { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .filter-input { background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text-main); padding: 5px 10px; border-radius: 4px; font-size: 12px; flex: 1; min-width: 100px; }
+        .filter-toggle { background: none; border: none; color: var(--text-main); font-size: 16px; cursor: pointer; font-weight: bold; transition: transform 0.2s; }
+        .filter-toggle:hover { transform: scale(1.1); color: var(--accent); }
+        .table-container { flex: 1; overflow: auto; border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 600px; }
+        th { text-align: left; padding: 8px; background: rgba(0,0,0,0.2); color: var(--text-muted); border-bottom: 1px solid var(--border); font-weight: normal; position: sticky; top: 0; }
+        td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .col-source, .col-dest { font-family: monospace; }
+        .col-size { text-align: right; font-family: monospace; }
+
+        /* --- Notifications Section --- */
+        .notif-section { flex: 1; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 15px; overflow: hidden; display: flex; flex-direction: column; }
+        .notif-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .notif-item { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; font-size: 12px; position: relative; border-left: 4px solid var(--accent); }
+        .notif-header { display: flex; gap: 10px; align-items: center; margin-bottom: 5px; }
+        .notif-time { color: var(--text-muted); font-family: monospace; font-size: 10px; }
+        .notif-text { color: var(--text-main); }
+        .notif-delete-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; }
+        .notif-delete-btn:hover { color: #ef4444; }
+
+        /* --- Global Map Grid --- */
+        .global-map-container { 
+            flex: 1; 
+            background: #000; 
+            position: relative; 
+            border-radius: 8px; 
+            margin-bottom: 15px; 
+            overflow: auto; 
+            border: 1px solid #334155;
+            max-height: 400px; 
+        }
+        .map-grid { 
+            display: grid; 
+            grid-template-columns: repeat(5, 1fr); 
+            gap: 2px; 
+            min-width: 800px; 
+            padding: 5px;
+        }
+        .map-node { 
+            background: rgba(255,255,255,0.05); 
+            border: 1px solid #334155; 
+            position: relative; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            transition: background 0.3s;
+            min-height: 60px;
+        }
+        .map-node.active { background: rgba(37, 211, 102, 0.2); border-color: var(--whatsapp); }
+        .map-node.pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(37, 211, 102, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); } }
+        .node-flag { font-size: 12px; margin-bottom: 2px; }
+        .node-status { font-size: 10px; color: var(--text-muted); }
+        .node-traffic { font-size: 9px; color: var(--accent); font-family: monospace; margin-top: 2px; }
+        
+        /* --- Drawing Graphs --- */
+        function drawGraph(ctx, data, startX, startY, color, bgColor) {
+            const canvas = ctx.canvas;
+            const width = canvas.width;
+            const height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+            ctx.beginPath();
+            ctx.moveTo(0, height);
+            ctx.lineTo(0, startY);
+            for (let i = 0; i < data.length; i++) {
+                const x = startX + (i * 10);
+                const scaledY = height - (data[i].y * 0.0008) - 5;
+                ctx.lineTo(x, scaledY);
+            }
+            ctx.lineTo(width, height);
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.5;
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i++) {
+                const x = startX + (i * 10);
+                const scaledY = height - (data[i].y * 0.0008) - 5;
+                if (i===0) ctx.moveTo(x, scaledY);
+                else ctx.lineTo(x, scaledY);
+            }
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    </style>
+</head>
+<body>
+
+<!-- TOP HEADER WITH ALL NAVIGATION OPTIONS -->
+<header>
+    <div class="brand-title">
+        <button class="icon-btn" onclick="switchTab('overview')">🏠</button>
+        <div style="font-size: 24px;">🎩</div>
+        <div style="font-size: 20px; font-weight: bold;" id="statusIndicator">Live</div>
+    </div>
+
+    <div class="header-center">
+        <button class="icon-btn" title="Overview" onclick="switchTab('overview')">📊 Overview</button>
+        <button class="icon-btn" title="Inspect" onclick="switchTab('inspect')">🔍 Inspect</button>
+        <button class="icon-btn" title="Notifications" onclick="switchTab('notif')">🔔 Notif</button>
+        <button class="icon-btn" title="Settings" onclick="switchTab('settings')">⚙️ Settings</button>
+        <button class="icon-btn" title="Bookmarks" onclick="switchTab('bookmarks')">📖 Bookmarks</button>
+        <button class="icon-btn" title="Refresh" onclick="switchTab('refresh')">🔄 Refresh</button>
+        <button class="icon-btn" title="WhatsApp Logs" onclick="switchTab('logs')">📋 Logs</button>
+        <button class="icon-btn" title="RSS" onclick="switchTab('rss')">📡 RSS</button>
+        <button class="icon-btn" title="Heart" onclick="switchTab('heart')">❤️ Heart</button>
+    </div>
+
+    <div class="right">
+        <button class="icon-btn" onclick="window.close()">✖</button>
+    </div>
+</header>
+
+<main>
+    <!-- OVERVIEW TAB -->
+    <div id="tab-overview" class="panel" style="flex: 3;">
+        <div class="panel-header">
+            <span>📊 Overview</span>
+            <div style="display: flex; gap: 20px;">
+                <span>🔍 <span class="badge">Search</span></span>
+                <span>🔔 <span class="badge">Notifications</span></span>
+            </div>
+        </div>
+
+        <div class="overview-section">
+            <!-- Left: Stats -->
+            <div class="stats-box">
+                <div class="stat-group">
+                    <div style="font-size: 12px; color: var(--text-muted);">Data representation:</div>
+                    <div style="font-weight: bold; color: var(--accent);">bytes</div>
+                </div>
+                <div class="stat-group">
+                    <div style="font-size: 12px; color: var(--text-muted);">Network adapter:</div>
+                    <div style="font-family: monospace;">en0 (Active)</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top:5px;">Active filters:</div>
+                    <div style="font-size: 12px;">none</div>
+                </div>
+                <div class="stat-group">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 5px;">Total Traffic:</div>
+                    <div class="traffic-circle">
+                        <span class="traffic-value" id="trafficTotal">0 MB</span>
+                    </div>
+                    <div class="traffic-legend">
+                        <span style="color: #eab308">● Incoming: 0 MB</span>
+                        <span style="color: #3b82f6">● Outgoing: 0 MB</span>
+                        <span style="color: #ef4444">● Dropped: 0 B</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Middle: Traffic Graph -->
+            <div class="traffic-graph-container">
+                <div class="graph-title">Traffic rate</div>
+                <div class="graph-container incoming">
+                    <canvas id="trafficGraph"></canvas>
+                </div>
+                <div class="graph-container outgoing">
+                    <canvas id="trafficGraphOut"></canvas>
+                </div>
+                <div class="graph-labels">
+                    <span style="color: #eab308">Incoming</span>
+                    <span style="color: #3b82f6">Outgoing</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- New: Global Map Grid (Full 195 Countries) -->
+        <div class="global-map-container">
+            <div class="map-grid" id="globalMapGrid">
+                <!-- Grid items generated by JS -->
+            </div>
+        </div>
+
+        <div class="split-section">
+            <!-- Network Hosts -->
+            <div class="split-panel">
+                <div class="split-header">
+                    <span>Network host</span>
+                    <span style="font-size: 12px;">▼</span>
+                </div>
+                <div id="hostsList">
+                    <!-- Dynamic Content -->
+                </div>
+            </div>
+
+            <!-- Services -->
+            <div class="split-panel">
+                <div class="split-header">
+                    <span>Service</span>
+                    <span style="font-size: 12px;">▼</span>
+                </div>
+                <div id="servicesList">
+                     <!-- Dynamic Content -->
+                </div>
+            </div>
+
+            <!-- Programs -->
+            <div class="split-panel">
+                <div class="split-header">
+                    <span>Program</span>
+                    <span style="font-size: 12px;">▼</span>
+                </div>
+                <div id="programsList">
+                     <!-- Dynamic Content -->
+                </div>
+            </div>
+        </div>
+
+        <!-- WhatsApp Real Data Section -->
+        <div class="wa-section">
+            <div class="wa-header">
+                <span class="wa-status-indicator"></span> WhatsApp Real Data (Live)
+            </div>
+            <div class="wa-data-grid">
+                <div class="wa-item">
+                    <span class="wa-label">Current Location</span>
+                    <span class="wa-value" id="waLoc">Detecting...</span>
+                </div>
+                <div class="wa-item">
+                    <span class="wa-label">Phone Number (E.164)</span>
+                    <span class="wa-value" id="waPhone">+1 (555) 000-0000</span>
+                </div>
+                <div class="wa-item">
+                    <span class="wa-label">Connection Type</span>
+                    <span class="wa-value" id="waConn">Checking...</span>
+                </div>
+                <div class="wa-item">
+                    <span class="wa-label">Last Sync</span>
+                    <span class="wa-value" id="waSync">Just now</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Keylogger Section (New) -->
+        <div class="keylogger-section">
+            <div class="keylogger-header">
+                <span>⌨️ Keylogger Box</span>
+                <button class="keylogger-toggle-btn" onclick="toggleKeylogger()">Show/Hide</button>
+            </div>
+            <div id="keyloggerBox" class="keylogger-box" style="display: block;">
+                <!-- Logs will appear here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW: WHATSAPP LOGS TAB (Recording & Export) -->
+    <div id="tab-logs" class="panel hidden" style="flex: 1; overflow-y: auto; background: #0e1c16; border-color: #25D366;">
+        <div class="panel-header">
+            <span>📋 WhatsApp Logs</span>
+            <div style="display: flex; gap: 10px;">
+                <button class="filter-toggle" onclick="exportLogs()">💾 Export CSV</button>
+                <button class="filter-toggle" onclick="clearLogs()">🗑 Clear</button>
+            </div>
+        </div>
+        <div style="color: var(--text-muted); padding: 5px; font-size: 11px; margin-bottom: 5px;">
+            <strong>Recording:</strong> <span id="recordingStatus" style="color: #25D366; font-weight: bold;">● Live</span>
+        </div>
+        <div style="color: var(--text-muted); padding: 5px; font-size: 11px; margin-bottom: 5px;">
+            <strong>Total Records:</strong> <span id="logCount">0</span>
+        </div>
+        <div class="table-container">
+            <table id="logsTable">
+                <thead>
+                    <tr>
+                        <th style="min-width: 100px;">Time</th>
+                        <th style="min-width: 150px;">Location</th>
+                        <th style="min-width: 120px;">Phone</th>
+                        <th style="min-width: 100px;">Connection</th>
+                        <th style="min-width: 80px;">Traffic (MB)</th>
+                    </tr>
+                </thead>
+                <tbody id="logsBody">
+                    <!-- Rows go here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- INSPECT TAB (Right Side, Hidden initially) - FIXED -->
+    <div id="tab-inspect" class="panel hidden" style="flex: 1; overflow-y: auto;">
+        <div class="panel-header">
+            <span>🔍 Inspect</span>
+            <div style="display: flex; gap: 15px;">
+                <button class="filter-toggle" onclick="toggleFilter('country')">🇺🇸 Country</button>
+                <button class="filter-toggle" onclick="toggleFilter('domain')">🌐 Domain</button>
+                <button class="filter-toggle" onclick="toggleFilter('asn')">🔢 ASN</button>
+                <button class="filter-toggle" onclick="toggleFilter('program')">🔧 Program</button>
+            </div>
+        </div>
+        <div class="filter-bar">
+            <input type="text" class="filter-input" placeholder="Address (source)" id="filterSource">
+            <input type="text" class="filter-input" placeholder="Address (destination)" id="filterDest">
+            <input type="text" class="filter-input" placeholder="Port (source)" id="filterPortSrc">
+            <input type="text" class="filter-input" placeholder="Port (dest)" id="filterPortDst">
+            <input type="text" class="filter-input" placeholder="Protocol" id="filterProtocol">
+            <input type="text" class="filter-input" placeholder="Service" id="filterService">
+            <input type="text" class="filter-input" placeholder="Bytes" id="filterBytes">
+        </div>
+        <div class="table-container">
+            <table id="inspectTable">
+                <thead>
+                    <tr>
+                        <th style="min-width: 150px;">Address (source)</th>
+                        <th style="min-width: 60px;">Port (source)</th>
+                        <th style="min-width: 150px;">Address (dest)</th>
+                        <th style="min-width: 60px;">Port (dest)</th>
+                        <th style="min-width: 80px;">Protocol</th>
+                        <th style="min-width: 80px;">Service</th>
+                        <th style="min-width: 60px;">Bytes</th>
+                    </tr>
+                </thead>
+                <tbody id="inspectBody">
+                    <!-- Rows here -->
+                </tbody>
+            </table>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); padding: 5px;">Showing 1-0 of 0 total results</div>
+    </div>
+
+    <!-- NOTIFICATIONS TAB (Right Side, Hidden initially) -->
+    <div id="tab-notif" class="panel hidden" style="flex: 1; overflow-y: auto;">
+        <div class="panel-header">
+            <span>🔔 Notifications</span>
+            <span class="badge">Live</span>
+        </div>
+        <div class="notif-list" id="notifList">
+            <!-- Notifications go here -->
+        </div>
+    </div>
+
+    <!-- SETTINGS TAB (New) -->
+    <div id="tab-settings" class="panel hidden" style="flex: 1;">
+        <div class="panel-header">
+            <span>⚙️ Settings</span>
+        </div>
+        <div style="color: var(--text-muted); padding: 10px;">
+            <div style="margin-bottom: 10px;"><strong>Update Interval:</strong> <span id="settingsInterval">5000</span> ms</div>
+            <div style="margin-bottom: 10px;"><strong>Dark Mode:</strong> <span style="color: var(--accent);">Enabled</span></div>
+            <div style="margin-bottom: 10px;"><strong>Log Level:</strong> <select style="background: rgba(0,0,0,0.2); color: var(--text-main); border: 1px solid var(--border); padding: 4px;"><option>Debug</option><option>Info</option><option>Warn</option></select></div>
+            <button style="background: var(--accent); color: #1e293b; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Save Changes</button>
+        </div>
+    </div>
+
+    <!-- BOOKMARKS TAB (New) -->
+    <div id="tab-bookmarks" class="panel hidden" style="flex: 1;">
+        <div class="panel-header">
+            <span>📖 Bookmarks</span>
+        </div>
+        <div style="color: var(--text-muted); padding: 10px;">
+            <div style="margin-bottom: 10px;"><strong>Quick Access:</strong></div>
+            <div style="padding: 5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; margin-bottom: 5px;">🌐 Global Net (Overview)</div>
+            <div style="padding: 5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; margin-bottom: 5px;">🔍 Deep Inspect</div>
+        </div>
+    </div>
+
+    <!-- REFRESH TAB (New) -->
+    <div id="tab-refresh" class="panel hidden" style="flex: 1;">
+        <div class="panel-header">
+            <span>🔄 Refresh</span>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 24px; cursor: pointer;" onclick="resetTraffic()">
+            🔄 Click to Hard Refresh
+        </div>
+    </div>
+
+    <!-- RSS TAB (New) -->
+    <div id="tab-rss" class="panel hidden" style="flex: 1;">
+        <div class="panel-header">
+            <span>📡 RSS Feed</span>
+        </div>
+        <div style="color: var(--text-muted); padding: 10px;">
+            <div style="margin-bottom: 10px;"><strong>Feeds:</strong></div>
+            <div style="padding: 5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">📡 TechCrunch</div>
+            <div style="padding: 5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">📡 The Verge</div>
+        </div>
+    </div>
+
+    <!-- HEART TAB (New) -->
+    <div id="tab-heart" class="panel hidden" style="flex: 1;">
+        <div class="panel-header">
+            <span>❤️ Favorites</span>
+        </div>
+        <div style="color: var(--text-muted); padding: 10px;">
+            <div style="margin-bottom: 10px;"><strong>Trusted IPs:</strong></div>
+            <div style="padding: 5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">💖 192.168.1.1 (Router)</div>
+            <div style="padding: 5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">💖 8.8.8.8 (Google DNS)</div>
+        </div>
+    </div>
+
+</main>
+
+<!-- MINIMAL FOOTER -->
+<footer>
+    <div class="left">Sniffnet 1.5.0</div>
+    <div class="right">Made with ❤️ by Isa Dagestani</div>
+</footer>
+
+<script>
+    // --- State Management ---
+    let state = {
+        intervalId: null,
+        startTime: Date.now(),
+        trafficIn: 0,
+        trafficOut: 0,
+        hosts: [],
+        services: [],
+        programs: [],
+        notifications: [],
+        graphData: { in: [], out: [] },
+        graphTime: 0,
+        currentTab: 'overview',
+        lastPacketTime: Date.now(),
+        updateInterval: 5000,
+        globalNodes: [],
+        keyloggerVisible: true,
+        status: 'Live',
+        logs: [] // New: Logs array
+    };
+
+    // --- Data Lists (Full 195 Countries & Extensive Services) ---
+    // Full ISO 3166-1 alpha-2 country dialing codes (195 countries)
+    const countries = [
+  { code: "AF", dial: "+93" },
+  { code: "AL", dial: "+355" },
+  { code: "DZ", dial: "+213" },
+  { code: "AD", dial: "+376" },
+  { code: "AO", dial: "+244" },
+  { code: "AG", dial: "+1-268" },
+  { code: "AR", dial: "+54" },
+  { code: "AM", dial: "+374" },
+  { code: "AU", dial: "+61" },
+  { code: "AT", dial: "+43" },
+  { code: "AZ", dial: "+994" },
+  { code: "BS", dial: "+1-242" },
+  { code: "BH", dial: "+973" },
+  { code: "BD", dial: "+880" },
+  { code: "BB", dial: "+1-246" },
+  { code: "BY", dial: "+375" },
+  { code: "BE", dial: "+32" },
+  { code: "BZ", dial: "+501" },
+  { code: "BJ", dial: "+229" },
+  { code: "BT", dial: "+975" },
+  { code: "BO", dial: "+591" },
+  { code: "BA", dial: "+387" },
+  { code: "BW", dial: "+267" },
+  { code: "BR", dial: "+55" },
+  { code: "BN", dial: "+673" },
+  { code: "BG", dial: "+359" },
+  { code: "BF", dial: "+226" },
+  { code: "BI", dial: "+257" },
+  { code: "KH", dial: "+855" },
+  { code: "CM", dial: "+237" },
+  { code: "CA", dial: "+1" },
+  { code: "CV", dial: "+238" },
+  { code: "CF", dial: "+236" },
+  { code: "TD", dial: "+235" },
+  { code: "CL", dial: "+56" },
+  { code: "CN", dial: "+86" },
+  { code: "CO", dial: "+57" },
+  { code: "KM", dial: "+269" },
+  { code: "CG", dial: "+242" },
+  { code: "CD", dial: "+243" },
+  { code: "CR", dial: "+506" },
+  { code: "CI", dial: "+225" },
+  { code: "HR", dial: "+385" },
+  { code: "CU", dial: "+53" },
+  { code: "CY", dial: "+357" },
+  { code: "CZ", dial: "+420" },
+  { code: "DK", dial: "+45" },
+  { code: "DJ", dial: "+253" },
+  { code: "DM", dial: "+1-767" },
+  { code: "DO", dial: "+1-809" },
+  { code: "EC", dial: "+593" },
+  { code: "EG", dial: "+20" },
+  { code: "SV", dial: "+503" },
+  { code: "GQ", dial: "+240" },
+  { code: "ER", dial: "+291" },
+  { code: "EE", dial: "+372" },
+  { code: "SZ", dial: "+268" },
+  { code: "ET", dial: "+251" },
+  { code: "FJ", dial: "+679" },
+  { code: "FI", dial: "+358" },
+  { code: "FR", dial: "+33" },
+  { code: "GA", dial: "+241" },
+  { code: "GM", dial: "+220" },
+  { code: "GE", dial: "+995" },
+  { code: "DE", dial: "+49" },
+  { code: "GH", dial: "+233" },
+  { code: "GR", dial: "+30" },
+  { code: "GD", dial: "+1-473" },
+  { code: "GT", dial: "+502" },
+  { code: "GN", dial: "+224" },
+  { code: "GW", dial: "+245" },
+  { code: "GY", dial: "+592" },
+  { code: "HT", dial: "+509" },
+  { code: "HN", dial: "+504" },
+  { code: "HU", dial: "+36" },
+  { code: "IS", dial: "+354" },
+  { code: "IN", dial: "+91" },
+  { code: "ID", dial: "+62" },
+  { code: "IR", dial: "+98" },
+  { code: "IQ", dial: "+964" },
+  { code: "IE", dial: "+353" },
+  { code: "IL", dial: "+972" },
+  { code: "IT", dial: "+39" },
+  { code: "JM", dial: "+1-876" },
+  { code: "JP", dial: "+81" },
+  { code: "JO", dial: "+962" },
+  { code: "KZ", dial: "+7" },
+  { code: "KE", dial: "+254" },
+  { code: "KI", dial: "+686" },
+  { code: "KP", dial: "+850" },
+  { code: "KR", dial: "+82" },
+  { code: "KW", dial: "+965" },
+  { code: "KG", dial: "+996" },
+  { code: "LA", dial: "+856" },
+  { code: "LV", dial: "+371" },
+  { code: "LB", dial: "+961" },
+  { code: "LS", dial: "+266" },
+  { code: "LR", dial: "+231" },
+  { code: "LY", dial: "+218" },
+  { code: "LI", dial: "+423" },
+  { code: "LT", dial: "+370" },
+  { code: "LU", dial: "+352" },
+  { code: "MG", dial: "+261" },
+  { code: "MW", dial: "+265" },
+  { code: "MY", dial: "+60" },
+  { code: "MV", dial: "+960" },
+  { code: "ML", dial: "+223" },
+  { code: "MT", dial: "+356" },
+  { code: "MH", dial: "+692" },
+  { code: "MR", dial: "+222" },
+  { code: "MU", dial: "+230" },
+  { code: "MX", dial: "+52" },
+  { code: "FM", dial: "+691" },
+  { code: "MD", dial: "+373" },
+  { code: "MC", dial: "+377" },
+  { code: "MN", dial: "+976" },
+  { code: "ME", dial: "+382" },
+  { code: "MA", dial: "+212" },
+  { code: "MZ", dial: "+258" },
+  { code: "MM", dial: "+95" },
+  { code: "NA", dial: "+264" },
+  { code: "NR", dial: "+674" },
+  { code: "NP", dial: "+977" },
+  { code: "NL", dial: "+31" },
+  { code: "NZ", dial: "+64" },
+  { code: "NI", dial: "+505" },
+  { code: "NE", dial: "+227" },
+  { code: "NG", dial: "+234" },
+  { code: "MK", dial: "+389" },
+  { code: "NO", dial: "+47" },
+  { code: "OM", dial: "+968" },
+  { code: "PK", dial: "+92" },
+  { code: "PW", dial: "+680" },
+  { code: "PA", dial: "+507" },
+  { code: "PG", dial: "+675" },
+  { code: "PY", dial: "+595" },
+  { code: "PE", dial: "+51" },
+  { code: "PH", dial: "+63" },
+  { code: "PL", dial: "+48" },
+  { code: "PT", dial: "+351" },
+  { code: "QA", dial: "+974" },
+  { code: "RO", dial: "+40" },
+  { code: "RU", dial: "+7" },
+  { code: "RW", dial: "+250" },
+  { code: "KN", dial: "+1-869" },
+  { code: "LC", dial: "+1-758" },
+  { code: "VC", dial: "+1-784" },
+  { code: "WS", dial: "+685" },
+  { code: "SM", dial: "+378" },
+  { code: "ST", dial: "+239" },
+  { code: "SA", dial: "+966" },
+  { code: "SN", dial: "+221" },
+  { code: "RS", dial: "+381" },
+  { code: "SC", dial: "+248" },
+  { code: "SL", dial: "+232" },
+  { code: "SG", dial: "+65" },
+  { code: "SK", dial: "+421" },
+  { code: "SI", dial: "+386" },
+  { code: "SB", dial: "+677" },
+  { code: "SO", dial: "+252" },
+  { code: "ZA", dial: "+27" },
+  { code: "SS", dial: "+211" },
+  { code: "ES", dial: "+34" },
+  { code: "LK", dial: "+94" },
+  { code: "SD", dial: "+249" },
+  { code: "SR", dial: "+597" },
+  { code: "SE", dial: "+46" },
+  { code: "CH", dial: "+41" },
+  { code: "SY", dial: "+963" },
+  { code: "TW", dial: "+886" },
+  { code: "TJ", dial: "+992" },
+  { code: "TZ", dial: "+255" },
+  { code: "TH", dial: "+66" },
+  { code: "TL", dial: "+670" },
+  { code: "TG", dial: "+228" },
+  { code: "TO", dial: "+676" },
+  { code: "TT", dial: "+1-868" },
+  { code: "TN", dial: "+216" },
+  { code: "TR", dial: "+90" },
+  { code: "TM", dial: "+993" },
+  { code: "TV", dial: "+688" },
+  { code: "UG", dial: "+256" },
+  { code: "UA", dial: "+380" },
+  { code: "AE", dial: "+971" },
+  { code: "GB", dial: "+44" },
+  { code: "US", dial: "+1" },
+  { code: "UY", dial: "+598" },
+  { code: "UZ", dial: "+998" },
+  { code: "VU", dial: "+678" },
+  { code: "VA", dial: "+379" },
+  { code: "VE", dial: "+58" },
+  { code: "VN", dial: "+84" },
+  { code: "YE", dial: "+967" },
+  { code: "ZM", dial: "+260" },
+  { code: "ZW", dial: "+263" }
+];
+
+    // Services List (Shortened for prototype but extensible)
+    const services = [
+      'Zoom Video',
+      'Telegram Messenger',
+      'Slack',
+      'Google Chrome',
+      'Thunderbird',
+      'Amazon AWS',
+      'Apple Inc.',
+      'GitHub',
+      'Fastly',
+      'Microsoft Teams',
+      'Discord',
+      'WhatsApp',
+      'Signal',
+      'Facebook',
+      'Instagram',
+      'TikTok',
+      'Snapchat',
+      'LinkedIn',
+      'Pinterest',
+      'Reddit',
+      'Tumblr',
+      'YouTube',
+      'Netflix',
+      'Spotify',
+      'SoundCloud',
+      'Twitch',
+      'Steam',
+      'Epic Games',
+      'PlayStation Network',
+      'Xbox Live',
+      'Nintendo Switch Online',
+      'Roblox',
+      'Minecraft',
+      'OpenAI',
+      'ChatGPT',
+      'Claude AI',
+      'Gemini AI',
+      'DeepSeek AI',
+      'Perplexity AI',
+      'Notion',
+      'Trello',
+      'Asana',
+      'ClickUp',
+      'Monday.com',
+      'Dropbox',
+      'Google Drive',
+      'OneDrive',
+      'iCloud',
+      'Mega NZ',
+      'Box',
+      'Canva',
+      'Figma',
+      'Adobe Photoshop',
+      'Adobe Illustrator',
+      'Adobe Premiere Pro',
+      'Adobe After Effects',
+      'CorelDRAW',
+      'Blender',
+      'AutoCAD',
+      'SketchUp',
+      'Cinema 4D',
+      'Unity Engine',
+      'Unreal Engine',
+      'Visual Studio Code',
+      'IntelliJ IDEA',
+      'PyCharm',
+      'Android Studio',
+      'Xcode',
+      'NetBeans',
+      'Eclipse IDE',
+      'Sublime Text',
+      'Atom Editor',
+      'Brackets',
+      'Vim',
+      'Nano Editor',
+      'Docker',
+      'Kubernetes',
+      'Jenkins',
+      'GitLab',
+      'Bitbucket',
+      'Heroku',
+      'Vercel',
+      'Netlify',
+      'DigitalOcean',
+      'Linode',
+      'Oracle Cloud',
+      'IBM Cloud',
+      'Cloudflare',
+      'Akamai',
+      'NGINX',
+      'Apache HTTP Server',
+      'MariaDB',
+      'MongoDB',
+      'MySQL',
+      'PostgreSQL',
+      'Redis',
+      'SQLite',
+      'Firebase',
+      'Supabase',
+      'PlanetScale',
+      'Railway',
+      'Render',
+      'OpenVPN',
+      'NordVPN',
+      'ExpressVPN',
+      'ProtonVPN',
+      'Surfshark',
+      'CyberGhost VPN',
+      'Avast Antivirus',
+      'AVG Antivirus',
+      'Kaspersky',
+      'Bitdefender',
+      'Norton Security',
+      'McAfee',
+      'Malwarebytes',
+      'Wireshark',
+      'Metasploit',
+      'Burp Suite',
+      'Nmap',
+      'Shodan',
+      'Censys',
+      'Kali Linux',
+      'Ubuntu',
+      'Debian',
+      'Arch Linux',
+      'Fedora Linux',
+      'CentOS',
+      'Red Hat Enterprise',
+      'Linux Mint',
+      'Windows 11',
+      'Windows Server',
+      'macOS',
+      'Android OS',
+      'iOS',
+      'Chrome OS',
+      'Opera Browser',
+      'Mozilla Firefox',
+      'Safari Browser',
+      'Brave Browser',
+      'Tor Browser',
+      'DuckDuckGo',
+      'Bing Search',
+      'Yahoo Mail',
+      'Gmail',
+      'Outlook',
+      'Proton Mail',
+      'Zoho Mail',
+      'cPanel',
+      'Plesk',
+      'WordPress',
+      'Shopify',
+      'WooCommerce',
+      'Magento',
+      'Wix',
+      'Squarespace',
+      'Blogger',
+      'Medium',
+      'Ghost CMS',
+      'Quora',
+      'Stack Overflow',
+      'Dev.to',
+      'Hashnode',
+      'CodePen',
+      'JSFiddle',
+      'Replit',
+      'Glitch',
+      'CodeSandbox',
+      'LeetCode',
+      'HackerRank',
+      'Codecademy',
+      'Coursera',
+      'Udemy',
+      'edX',
+      'Khan Academy',
+      'Duolingo',
+      'PayPal',
+      'Stripe',
+      'Wise',
+      'Payoneer',
+      'GCash',
+      'Maya',
+      'Binance',
+      'Coinbase',
+      'Kraken',
+      'Bybit',
+      'OKX',
+      'MetaMask',
+      'Trust Wallet',
+      'Ledger Wallet',
+      'Trezor',
+      'TradingView',
+      'Robinhood',
+      'eToro',
+      'Yahoo Finance',
+      'Bloomberg',
+      'CNN',
+      'BBC News',
+      'Reuters',
+      'The New York Times',
+      'Wikipedia',
+      'Fandom',
+      'IMDb',
+      'Rotten Tomatoes',
+      'Crunchyroll',
+      'Disney Plus',
+      'Hulu',
+      'Amazon Prime Video',
+      'HBO Max',
+      'Paramount Plus',
+      'Peacock TV',
+      'Apple Music',
+      'YouTube Music',
+      'Pandora',
+      'Deezer',
+      'Tidal',
+      'Shazam',
+      'CapCut',
+      'InShot',
+      'KineMaster',
+      'Filmora',
+      'DaVinci Resolve',
+      'OBS Studio',
+      'Streamlabs',
+      'NVIDIA GeForce',
+      'AMD Radeon',
+      'Intel Corporation',
+      'Qualcomm',
+      'MediaTek',
+      'Cisco Systems',
+      'Huawei',
+      'Xiaomi',
+      'Samsung Electronics',
+      'Sony Interactive',
+      'LG Electronics',
+      'Panasonic',
+      'Philips',
+      'Tesla',
+      'SpaceX',
+      'Starlink',
+      'Blue Origin',
+      'Uber',
+      'Grab',
+      'Lyft',
+      'Airbnb',
+      'Booking.com',
+      'Agoda',
+      'TripAdvisor',
+      'Foodpanda',
+      'DoorDash',
+      'Uber Eats',
+      'Zomato',
+      'McDonald’s',
+      'KFC',
+      'Starbucks',
+      'Subway',
+      'Burger King',
+      'Domino’s Pizza',
+      'Pizza Hut',
+      'Coca-Cola',
+      'Pepsi',
+      'Nike',
+      'Adidas',
+      'Puma',
+      'Under Armour',
+      'Gucci',
+      'Louis Vuitton',
+      'Rolex',
+      'Ferrari',
+      'Lamborghini',
+      'BMW',
+      'Mercedes-Benz',
+      'Toyota',
+      'Honda',
+      'Ford Motor',
+      'Chevrolet',
+      'Hyundai',
+      'Kia Motors',
+      'Volvo',
+      'IKEA',
+      'Amazon Shopping',
+      'eBay',
+      'AliExpress',
+      'Temu',
+      'Shopee',
+      'Lazada',
+      'Rakuten',
+      'Target',
+      'Walmart',
+      'Best Buy',
+      'Micro Center',
+      'Newegg',
+      'Logitech',
+      'Razer',
+      'Corsair',
+      'SteelSeries',
+      'HyperX',
+      'Alienware',
+      'MSI Gaming',
+      'ASUS Republic of Gamers',
+      'Lenovo Legion',
+      'Acer Predator',
+      'HP Omen',
+      'Dell Technologies',
+      'Samsung Cloud',
+      'Synology',
+      'QNAP',
+      'TrueNAS',
+      'VMware',
+      'VirtualBox',
+      'Parallels Desktop',
+      'TeamViewer',
+      'AnyDesk',
+      'Chrome Remote Desktop',
+      'FileZilla',
+      'WinRAR',
+      '7-Zip',
+      'uTorrent',
+      'qBittorrent',
+      'Transmission',
+      'VLC Media Player',
+      'KMPlayer',
+      'PotPlayer',
+      'Winamp',
+      'Audacity',
+      'FL Studio',
+      'Ableton Live',
+      'Logic Pro',
+      'Cubase',
+      'Pro Tools',
+      'Serato DJ',
+      'VirtualDJ',
+      'GarageBand',
+      'BandLab',
+      'Soundtrap',
+      'Chatwork',
+      'Mattermost',
+      'Rocket.Chat',
+      'Zulip',
+      'Basecamp',
+      'Airtable',
+      'Zoho CRM',
+      'HubSpot',
+      'Salesforce',
+      'SAP',
+      'Oracle Database',
+      'ServiceNow',
+      'Freshdesk',
+      'Zendesk',
+      'Intercom',
+      'Twilio',
+      'SendGrid',
+      'Mailchimp',
+      'Brevo',
+      'Postman',
+      'Insomnia REST',
+      'Swagger UI',
+      'Grafana',
+      'Prometheus',
+      'ElasticSearch',
+      'Kibana',
+      'Splunk',
+      'Datadog',
+      'New Relic',
+      'PagerDuty',
+      'Sentry',
+      'CrowdStrike',
+      'SentinelOne',
+      'Palo Alto Networks',
+      'Fortinet',
+      'Sophos',
+      'Check Point',
+      'ZeroDays Company Inc.',
+      'ZeroDays Toolkit',
+      'ZeroDays AI',
+      'ZeroDays Network',
+      'ZeroDays Cloud',
+      'ZeroDays Secure VPN',
+      'ZeroDays Media Player',
+      'ZeroDays Cyber Tools',
+      'ZeroDays Explorer',
+      'ZeroDays Scanner',
+      'ZeroDays Browser',
+      'ZeroDays Shield',
+      'ZeroDays OS',
+      'ZeroDays Studio',
+      'ZeroDays Hosting',
+      'ZeroDays Labs',
+      'ZeroDays API',
+      'ZeroDays Search',
+      'ZeroDays Chat',
+      'ZeroDays Music',
+      'ZeroDays Video',
+      'ZeroDays Engine',
+      'ZeroDays Firewall',
+      'ZeroDays AI Assistant',
+      'ZeroDays Maps',
+      'ZeroDays Terminal',
+      'ZeroDays VPN',
+      'ZeroDays Protect',
+      'ZeroDays DNS',
+      'ZeroDays Mail',
+      'ZeroDays Stream',
+      'ZeroDays CDN',
+      'ZeroDays Storage',
+      'ZeroDays Compute',
+      'ZeroDays Monitor',
+      'ZeroDays Voice',
+      'ZeroDays Mobile',
+      'ZeroDays Connect',
+      'ZeroDays Analytics',
+      'ZeroDays Platform',
+      'ZeroDays Enterprise',
+      'ZeroDays Premium',
+      'ZeroDays Ultra',
+      'ZeroDays Pro',
+      'ZeroDays Quantum',
+      'ZeroDays Matrix',
+      'ZeroDays Core',
+      'ZeroDays Infinity',
+      'ZeroDays HyperNet',
+      'ZeroDays Live',
+      'ZeroDays Global',
+      'ZeroDays One',
+      'ZeroDays Nexus',
+      'ZeroDays Vision',
+      'ZeroDays Future',
+      'ZeroDays AI Cloud',
+      'ZeroDays Workspace',
+      'ZeroDays Secure',
+      'ZeroDays Sync',
+      'ZeroDays Transfer',
+      'ZeroDays Link',
+      'ZeroDays Connect Pro',
+      'ZeroDays Web',
+      'ZeroDays Browser X',
+      'ZeroDays Mobile OS',
+      'ZeroDays Assistant X',
+      'ZeroDays Network Shield',
+      'ZeroDays Intelligence',
+      'ZeroDays Data Hub',
+      'ZeroDays Hosting Pro',
+      'ZeroDays Game Hub',
+      'ZeroDays Remote',
+      'ZeroDays Device Manager',
+      'ZeroDays Virtual Machine',
+      'ZeroDays Hypervisor',
+      'ZeroDays Studio Pro',
+      'ZeroDays Encode',
+      'ZeroDays Decode',
+      'ZeroDays Encrypt',
+      'ZeroDays Decrypt',
+      'ZeroDays AI Vision',
+      'ZeroDays AI Voice',
+      'ZeroDays AI Music',
+      'ZeroDays AI Video',
+      'ZeroDays AI Generator',
+      'ZeroDays AI Studio',
+      'ZeroDays Command Center',
+      'ZeroDays Mission Control',
+      'ZeroDays Kernel',
+      'ZeroDays Secure Access',
+      'ZeroDays Blockchain',
+      'ZeroDays Wallet',
+      'ZeroDays Exchange',
+      'ZeroDays Finance',
+      'ZeroDays Streaming',
+      'ZeroDays Marketplace',
+      'ZeroDays Search Engine',
+      'ZeroDays Browser Secure',
+      'ZeroDays VPN Ultra',
+      'ZeroDays Hosting Cloud',
+      'ZeroDays Workspace AI',
+      'ZeroDays Smart Tools',
+      'ZeroDays Fusion',
+      'ZeroDays Universe',
+      'ZeroDays AI Ultra',
+    ];
+    const flags = [
+      '🇦🇫','🇦🇱','🇩🇿','🇦🇩','🇦🇴','🇦🇬','🇦🇷','🇦🇲','🇦🇺','🇦🇹',
+      '🇦🇿','🇧🇸','🇧🇭','🇧🇩','🇧🇧','🇧🇾','🇧🇪','🇧🇿','🇧🇯','🇧🇹',
+      '🇧🇴','🇧🇦','🇧🇼','🇧🇷','🇧🇳','🇧🇬','🇧🇫','🇧🇮','🇨🇻','🇰🇭',
+      '🇨🇲','🇨🇦','🇨🇫','🇹🇩','🇨🇱','🇨🇳','🇨🇴','🇰🇲','🇨🇬','🇨🇷',
+      '🇭🇷','🇨🇺','🇨🇾','🇨🇿','🇩🇰','🇩🇯','🇩🇲','🇩🇴','🇪🇨','🇪🇬',
+      '🇸🇻','🇬🇶','🇪🇷','🇪🇪','🇸🇿','🇪🇹','🇫🇯','🇫🇮','🇫🇷','🇬🇦',
+      '🇬🇲','🇬🇪','🇩🇪','🇬🇭','🇬🇷','🇬🇩','🇬🇹','🇬🇳','🇬🇼','🇬🇾',
+      '🇭🇹','🇭🇳','🇭🇺','🇮🇸','🇮🇳','🇮🇩','🇮🇷','🇮🇶','🇮🇪','🇮🇱',
+      '🇮🇹','🇯🇲','🇯🇵','🇯🇴','🇰🇿','🇰🇪','🇰🇮','🇰🇵','🇰🇷','🇰🇼',
+      '🇰🇬','🇱🇦','🇱🇻','🇱🇧','🇱🇸','🇱🇷','🇱🇾','🇱🇮','🇱🇹','🇱🇺',
+      '🇲🇬','🇲🇼','🇲🇾','🇲🇻','🇲🇱','🇲🇹','🇲🇭','🇲🇷','🇲🇺','🇲🇽',
+      '🇫🇲','🇲🇩','🇲🇨','🇲🇳','🇲🇪','🇲🇦','🇲🇿','🇲🇲','🇳🇦','🇳🇷',
+      '🇳🇵','🇳🇱','🇳🇿','🇳🇮','🇳🇪','🇳🇬','🇲🇰','🇳🇴','🇴🇲','🇵🇰',
+      '🇵🇼','🇵🇸','🇵🇦','🇵🇬','🇵🇾','🇵🇪','🇵🇭','🇵🇱','🇵🇹','🇶🇦',
+      '🇷🇴','🇷🇺','🇷🇼','🇰🇳','🇱🇨','🇻🇨','🇼🇸','🇸🇲','🇸🇹','🇸🇦',
+      '🇸🇳','🇷🇸','🇸🇨','🇸🇱','🇸🇬','🇸🇰','🇸🇮','🇸🇧','🇸🇴','🇿🇦',
+      '🇸🇸','🇪🇸','🇱🇰','🇸🇩','🇸🇷','🇸🇪','🇨🇭','🇸🇾','🇹🇼','🇹🇯',
+      '🇹🇿','🇹🇭','🇹🇱','🇹🇬','🇹🇴','🇹🇹','🇹🇳','🇹🇷','🇹🇲','🇹🇻',
+      '🇺🇬','🇺🇦','🇦🇪','🇬🇧','🇺🇸','🇺🇾','🇺🇿','🇻🇺','🇻🇦','🇻🇪',
+      '🇻🇳','🇾🇪','🇿🇲','🇿🇼'
+    ];
+
+    // Initialize Global Nodes
+    function initGlobalNodes() {
+        state.globalNodes = countries.map(c => ({
+            ...c,
+            name: c.code,
+            active: Math.random() > 0.7,
+            traffic: 0,
+            lastUpdate: Date.now()
+        }));
+        renderGlobalMap();
+    }
+
+    function updateGlobalNodes() {
+        state.globalNodes.forEach(node => {
+            if (Math.random() > 0.95) {
+                node.active = !node.active;
+                node.traffic = Math.random() * 100;
+                node.lastUpdate = Date.now();
+            }
+        });
+        renderGlobalMap();
+    }
+
+    // --- Responsive Grid Render ---
+    function renderGlobalMap() {
+        const container = document.getElementById('globalMapGrid');
+        if(!container) return;
+        
+        container.innerHTML = ''; // Clear existing
+        const totalNodes = state.globalNodes.length;
+        
+        // Calculate grid columns based on screen width to ensure scrolling works
+        const width = window.innerWidth;
+        let cols;
+        if (width < 600) cols = 3; // Mobile: 3 columns (responsive scroll)
+        else if (width < 1000) cols = 4; // Tablet
+        else cols = 5; // Desktop
+
+        // We removed grid-template-rows logic to allow natural expansion for scrolling
+        container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+        for(let i=0; i<totalNodes; i++) {
+            const node = state.globalNodes[i];
+            const div = document.createElement('div');
+            div.className = `map-node ${node.active ? 'active' : ''} ${Math.random() > 0.9 ? 'pulse' : ''}`;
+            div.innerHTML = `<div class="node-flag">${node.name}</div><div class="node-status">${node.active ? 'ONLINE' : 'STANDBY'}</div><div class="node-traffic">${node.traffic.toFixed(1)} MB/s</div>`;
+            container.appendChild(div);
+        }
+    }
+
+    // --- Traffic Simulation ---
+    function startTrafficMonitor() {
+        if (navigator.connection) {
+            let effectiveType = navigator.connection.effectiveType || '4g';
+            let maxBitRate = 50000000;
+            if (effectiveType === 'slow-2g') maxBitRate = 1000000;
+            else if (effectiveType === '2g') maxBitRate = 3000000;
+            else if (effectiveType === '3g') maxBitRate = 10000000;
+            else if (effectiveType === '4g') maxBitRate = 50000000;
+            else if (effectiveType === '5g') maxBitRate = 200000000;
+
+            maxBitRate = Number(maxBitRate);
+            const bandwidthMegaBytePerSec = maxBitRate / 8 / 1024 / 1024;
+
+            setInterval(() => {
+                const now = Date.now();
+                const randomVar = (Math.random() - 0.5) * 100; 
+                const rateIn = bandwidthMegaBytePerSec / 2 + randomVar;
+                const rateOut = bandwidthMegaBytePerSec / 4 + randomVar;
+                
+                const timeDiff = (now - state.lastPacketTime) / 1000;
+                
+                state.trafficIn += rateIn * timeDiff;
+                state.trafficOut += rateOut * timeDiff;
+                state.lastPacketTime = now;
+
+                updateWhatsAppData(now, rateIn, rateOut);
+                updateUI();
+                updateLogs(now, rateIn, rateOut); // NEW: Update Logs
+            }, 1000);
+        }
+    }
+
+    function updateWhatsAppData(now, rateIn, rateOut) {
+        const locElem = document.getElementById('waLoc');
+        const phoneElem = document.getElementById('waPhone');
+        const connElem = document.getElementById('waConn');
+        const syncElem = document.getElementById('waSync');
+
+        const locs = [
+            "Kabul, AF", "Tirana, AL", "Algiers, DZ", "Andorra la Vella, AD", "Luanda, AO",
+            "Saint John's, AG", "Buenos Aires, AR", "Yerevan, AM", "Canberra, AU", "Vienna, AT",
+            "Baku, AZ", "Nassau, BS", "Manama, BH", "Dhaka, BD", "Bridgetown, BB",
+            "Minsk, BY", "Brussels, BE", "Belmopan, BZ", "Porto-Novo, BJ", "Hamilton, BM",
+            "Thimphu, BT", "Sucre, BO", "Sarajevo, BA", "Gaborone, BW", "Brasilia, BR",
+            "Bandar Seri Begawan, BN", "Sofia, BG", "Ouagadougou, BF", "Bujumbura, BI",
+            "Praia, CV", "Phnom Penh, KH", "Yaounde, CM", "Ottawa, CA", "George Town, KY",
+            "Bangui, CF", "N'Djamena, TD", "Santiago, CL", "Beijing, CN", "Bogota, CO",
+            "Moroni, KM", "Brazzaville, CG", "Kinshasa, CD", "San Jose, CR", "Yamoussoukro, CI",
+            "Zagreb, HR", "Havana, CU", "Nicosia, CY", "Prague, CZ", "Copenhagen, DK",
+            "Djibouti, DJ", "Roseau, DM", "Santo Domingo, DO", "Quito, EC", "Cairo, EG",
+            "San Salvador, SV", "Malabo, GQ", "Asmara, ER", "Tallinn, EE", "Mbabane, SZ",
+            "Addis Ababa, ET", "Suva, FJ", "Helsinki, FI", "Paris, FR", "Libreville, GA",
+            "Banjul, GM", "Tbilisi, GE", "Berlin, DE", "Accra, GH", "Athens, GR",
+            "Saint George's, GD", "Guatemala City, GT", "Conakry, GN", "Bissau, GW",
+            "Georgetown, GY", "Port-au-Prince, HT", "Vatican City, VA", "Tegucigalpa, HN",
+            "Budapest, HU", "Reykjavik, IS", "New Delhi, IN", "Jakarta, ID", "Tehran, IR",
+            "Baghdad, IQ", "Dublin, IE", "Jerusalem, IL", "Rome, IT", "Kingston, JM",
+            "Tokyo, JP", "Amman, JO", "Nur-Sultan, KZ", "Nairobi, KE", "Tarawa, KI",
+            "Pyongyang, KP", "Seoul, KR", "Kuwait City, KW", "Bishkek, KG", "Vientiane, LA",
+            "Riga, LV", "Beirut, LB", "Maseru, LS", "Monrovia, LR", "Tripoli, LY",
+            "Vaduz, LI", "Vilnius, LT", "Luxembourg, LU", "Antananarivo, MG", "Lilongwe, MW",
+            "Kuala Lumpur, MY", "Male, MV", "Bamako, ML", "Valletta, MT", "Majuro, MH",
+            "Nouakchott, MR", "Port Louis, MU", "Mexico City, MX", "Palikir, FM",
+            "Chisinau, MD", "Monaco, MC", "Ulaanbaatar, MN", "Podgorica, ME", "Rabat, MA",
+            "Maputo, MZ", "Naypyidaw, MM", "Windhoek, NA", "Yaren, NR", "Kathmandu, NP",
+            "Amsterdam, NL", "Wellington, NZ", "Managua, NI", "Niamey, NE", "Abuja, NG",
+            "Skopje, MK", "Oslo, NO", "Muscat, OM", "Islamabad, PK", "Ngerulmud, PW",
+            "Panama City, PA", "Port Moresby, PG", "Asuncion, PY", "Lima, PE", "Manila, PH",
+            "Warsaw, PL", "Lisbon, PT", "Doha, QA", "Bucharest, RO", "Moscow, RU",
+            "Kigali, RW", "Basseterre, KN", "Castries, LC", "Kingstown, VC", "Apia, WS",
+            "San Marino, SM", "Sao Tome, ST", "Riyadh, SA", "Dakar, SN", "Belgrade, RS",
+            "Victoria, SC", "Freetown, SL", "Singapore, SG", "Bratislava, SK", "Ljubljana, SI",
+            "Honiara, SB", "Mogadishu, SO", "Pretoria, ZA", "Juba, SS", "Madrid, ES",
+            "Sri Jayawardenepura Kotte, LK", "Khartoum, SD", "Paramaribo, SR", "Stockholm, SE",
+            "Bern, CH", "Damascus, SY", "Taipei, TW", "Dushanbe, TJ", "Dodoma, TZ",
+            "Bangkok, TH", "Dili, TL", "Lome, TG", "Nuku'alofa, TO", "Port of Spain, TT",
+            "Tunis, TN", "Ankara, TR", "Ashgabat, TM", "Kampala, UG", "Kyiv, UA",
+            "Abu Dhabi, AE", "London, GB", "Washington D.C., US", "Montevideo, UY",
+            "Tashkent, UZ", "Port Vila, VU", "Caracas, VE", "Hanoi, VN", "Sana'a, YE",
+            "Lusaka, ZM", "Harare, ZW"
+        ];
+
+        const locIndex = Math.floor(Math.random() * locs.length);
+        locElem.innerText = locs[locIndex];
+
+        const countryCode = locs[locIndex].split(', ').pop();
+        const countryObj = countries.find(c => c.code === countryCode);
+        const basePhone = countryObj ? countryObj.dial : "+1";
+        const suffix = Math.floor(Math.random() * 9000000) + 1000000;
+        phoneElem.innerText = basePhone + " " + suffix;
+
+        const types = ['5G', '4G', '3G', 'Wi-Fi 6'];
+        connElem.innerText = types[Math.floor(Math.random() * types.length)];
+
+        syncElem.innerText = new Date(now).toLocaleTimeString();
+
+        document.getElementById('trafficTotal').innerText = (state.trafficIn + state.trafficOut).toFixed(1) + ' MB';
+    }
+
+    // --- NEW: WhatsApp Logs Update & Export ---
+    function updateLogs(now, rateIn, rateOut) {
+        const totalMB = (rateIn + rateOut).toFixed(1);
+        const locElem = document.getElementById('waLoc');
+        const locText = locElem.innerText;
+        
+        // Create log entry
+        const logEntry = {
+            time: new Date().toLocaleTimeString(),
+            location: locText,
+            phone: document.getElementById('waPhone').innerText,
+            connection: document.getElementById('waConn').innerText,
+            traffic: totalMB
+        };
+
+        // Add to logs array (keep last 500 for performance)
+        state.logs.push(logEntry);
+        if (state.logs.length > 500) {
+            state.logs.shift();
+        }
+
+        renderLogsTable();
+    }
+
+    function renderLogsTable() {
+        const tbody = document.getElementById('logsBody');
+        const countSpan = document.getElementById('logCount');
+        
+        // Show last 100 rows for performance
+        const recentLogs = state.logs.slice(-100);
+        
+        if (recentLogs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">No data yet. Waiting for traffic simulation...</td></tr>';
+            countSpan.innerText = '0';
+            return;
+        }
+
+        let html = '';
+        // Show newest first
+        for (let i = recentLogs.length - 1; i >= 0; i--) {
+            const log = recentLogs[i];
+            html += `
+            <tr>
+                <td style="font-family: monospace; font-size: 10px;">${log.time}</td>
+                <td style="overflow:hidden; text-overflow:ellipsis; max-width:120px;">${log.location}</td>
+                <td style="font-family: monospace; font-size: 10px;">${log.phone}</td>
+                <td style="font-size: 10px;">${log.connection}</td>
+                <td style="font-family: monospace; font-size: 10px;">${log.traffic}</td>
+            </tr>`;
+        }
+        tbody.innerHTML = html;
+        countSpan.innerText = state.logs.length;
+    }
+
+    function exportLogs() {
+        if (state.logs.length === 0) {
+            alert("No logs to export yet!");
+            return;
+        }
+
+        // Build CSV Content
+        let csvContent = "Time,Location,Phone,Connection,Traffic\n";
+        
+        state.logs.forEach(log => {
+            // Escape quotes in text fields
+            const safeLoc = `"${log.location.replace(/"/g, '""')}"`;
+            const safePhone = `"${log.phone.replace(/"/g, '""')}"`;
+            csvContent += `${log.time},${safeLoc},${safePhone},${log.connection},${log.traffic}\n`;
+        });
+
+        // Create download link
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute("hidden", "");
+        a.setAttribute("href", url);
+        a.setAttribute("download", "whatsapp_simulation_logs.csv");
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+
+    function clearLogs() {
+        if(confirm("Clear all recorded logs?")) {
+            state.logs = [];
+            renderLogsTable();
+        }
+    }
+
+    function updateUI() {
+        const now = state.graphTime;
+        const canvasIn = document.getElementById('trafficGraph');
+        const canvasOut = document.getElementById('trafficGraphOut');
+
+        if(canvasIn && canvasOut) {
+            drawGraph(canvasIn.getContext('2d'), state.graphData.in, 10, 20, '#eab308', '#1e293b');
+            drawGraph(canvasOut.getContext('2d'), state.graphData.out, 25, 20, '#3b82f6', '#1e293b');
+        }
+        
+        state.graphData.in.push({x: now, y: state.trafficIn * 10});
+        state.graphData.out.push({x: now, y: state.trafficOut * 10});
+        
+        if (state.graphData.in.length > 100) {
+            state.graphData.in.shift();
+            state.graphData.out.shift();
+        }
+
+        if (Math.random() > 0.7) addInspectRow();
+        if (Math.random() > 0.9) updateHosts();
+        if (Math.random() > 0.9) updatePrograms();
+        if (Math.random() > 0.95) addNotification();
+        if (Math.random() > 0.98) updateGlobalNodes();
+    }
+
+    // --- Data Simulation Logic ---
+    function updateHosts() {
+        const newHosts = [];
+        // Generate 3 random hosts per update
+        for(let i=0; i<3; i++) {
+            if(Math.random() > 0.5) {
+                const flag = flags[Math.floor(Math.random() * flags.length)];
+                const serviceName = services[Math.floor(Math.random() * services.length)];
+                const size = (Math.random() * 10).toFixed(1);
+                
+                newHosts.push({
+                    icon: flag,
+                    text: `${serviceName} - ${serviceName.split(' ')[0]}, Inc.`,
+                    size: size + ' MB'
+                });
+            }
+        }
+        state.hosts = [...newHosts, ...state.hosts].slice(0, 20); // Keep top 20
+        renderHosts();
+    }
+
+    function renderHosts() {
+        const container = document.getElementById('hostsList');
+        if (state.hosts.length === 0) {
+             container.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-muted); font-size: 12px;">Loading hosts...</div>';
+             return;
+        }
+        let html = '';
+        state.hosts.forEach(host => {
+            html += `<div class="split-row"><div class="split-icon">${host.icon}</div><div class="split-info">${host.text}</div><div class="split-bar-container"><div class="split-bar-fill" style="width: ${Math.random() * 100}%; background: ${Math.random() > 0.5 ? '#eab308' : '#3b82f6'}"></div></div><div class="split-size">${host.size}</div></div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function updatePrograms() {
+        const apps = ['Zoom.us', 'Telegram', 'Slack Helper', 'Google Chrome', 'Thunderbird', 'Rapportd'];
+        const newApps = [];
+        for(let i=0; i<2; i++) {
+            const app = apps[Math.floor(Math.random() * apps.length)];
+            newApps.push({
+                icon: app,
+                text: app,
+                size: (Math.random() * 30).toFixed(1) + ' MB'
+            });
+        }
+        state.programs = [...newApps, ...state.programs].slice(0, 15);
+        renderPrograms();
+    }
+
+    function renderPrograms() {
+        const container = document.getElementById('programsList');
+        if (state.programs.length === 0) {
+             container.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-muted); font-size: 12px;">Loading programs...</div>';
+             return;
+        }
+        let html = '';
+        state.programs.forEach(app => {
+            html += `<div class="split-row"><div class="split-icon">${app.icon.split(' ')[0]}</div><div class="split-info">${app.text}</div><div class="split-bar-container"><div class="split-bar-fill" style="width: ${Math.random() * 100}%; background: ${Math.random() > 0.5 ? '#eab308' : '#3b82f6'}"></div></div><div class="split-size">${app.size}</div></div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    // --- FIXED: Inspect Table Population Function ---
+    function addInspectRow() {
+        const table = document.getElementById('inspectBody');
+        if(table && table.rows.length > 100) table.deleteRow(0);
+
+        // Generate more realistic IP pairs for "Inspect"
+        const sourceIp = `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
+        const destIp = `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
+        const portSrc = 443 + Math.floor(Math.random() * 1000);
+        const portDst = 60500 + Math.floor(Math.random() * 500);
+        const protocol = ['TCP', 'UDP'][Math.floor(Math.random() * 2)];
+        const service = ['https', 'http', 'zeroconf', 'domain', 'hpvroom'][Math.floor(Math.random() * 5)];
+        const bytes = (Math.random() * 50 + 1).toFixed(1) + ' KB';
+
+        if (table) {
+            const row = table.insertRow();
+            // Mapping: 0=SrcIP, 1=SrcPort, 2=DstIP, 3=DstPort, 4=Proto, 5=Service, 6=Bytes
+            row.innerHTML = `<td class="col-source" style="color: var(--accent)">${sourceIp}</td><td class="col-source">${portSrc}</td><td class="col-dest" style="color: var(--accent)">${destIp}</td><td class="col-source">${portDst}</td><td>${protocol}</td><td>${service}</td><td class="col-size">${bytes}</td>`;
+        }
+    }
+
+    function addNotification() {
+        const notifList = document.getElementById('notifList');
+        if(!notifList) return;
+        
+        const notifItem = document.createElement('div');
+        notifItem.className = 'notif-item';
+        const types = ['New data exchanged from favorites', 'Bytes threshold exceeded', 'New data exchanged from a blacklisted IP', 'Service detected'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        const time = new Date().toLocaleTimeString();
+        const icon = Math.random() > 0.5 ? '⭐' : '⏱';
+        
+        notifItem.innerHTML = `<div class="notif-header"><div style="font-size: 20px;">${icon}</div><div class="notif-text">${time} <br> ${type}</div><div class="notif-meta"><span style="color:#eab308">198 B</span><span style="color:#3b82f6">https</span></div></div><div class="notif-delete-btn" onclick="this.parentElement.remove()">🗑</div>`;
+        notifList.prepend(notifItem);
+    }
+
+    // --- UI Interaction ---
+    function switchTab(tabName) {
+        // Hide all tabs first
+        const allTabIds = ['tab-overview', 'tab-inspect', 'tab-notif', 'tab-logs', 'tab-settings', 'tab-bookmarks', 'tab-refresh', 'tab-rss', 'tab-heart'];
+        
+        allTabIds.forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.classList.add('hidden');
+        });
+
+        // Show selected tab
+        const selectedTab = document.getElementById('tab-' + tabName);
+        if(selectedTab) {
+            selectedTab.classList.remove('hidden');
+        } else {
+            // Fallback if ID missing
+            console.warn("Tab not found: " + tabName);
+            return;
+        }
+
+        // Update state
+        state.currentTab = tabName;
+
+        // Update Header Indicator
+        const indicator = document.getElementById('statusIndicator');
+        if (indicator) {
+            if (tabName === 'overview') indicator.innerText = 'Live';
+            else indicator.innerText = tabName.charAt(0).toUpperCase() + tabName.slice(1);
+        }
+    }
+
+    // --- FIXED: Inspect Table Filter Logic ---
+    function toggleFilter(type) {
+        const tableBody = document.getElementById('inspectBody');
+        if (!tableBody || tableBody.rows.length === 0) {
+            alert("No data to filter. Wait for some traffic simulation.");
+            return;
+        }
+
+        // Visual feedback: Highlight the active filter button
+        const buttons = document.querySelectorAll('.filter-toggle');
+        buttons.forEach(btn => {
+            // Simple check based on button text content
+            if (btn.innerText.includes(type.charAt(0).toUpperCase() + type.slice(1))) {
+                btn.style.transform = 'scale(0.95)';
+                btn.style.color = 'var(--accent)'; // Highlight active button
+            } else {
+                btn.style.transform = 'scale(1)';
+                btn.style.color = 'var(--text-main)'; // Reset inactive buttons
+            }
+        });
+
+        // Define column mappings for each filter type
+        // 0 = Address (source), 1 = Port (source), 2 = Address (dest), 3 = Port (dest), 4 = Protocol, 5 = Service, 6 = Bytes
+        let columnMap = {
+            'country': 0,    // Assuming Address(source) contains country info or mapping
+            'domain': 0,     // Assuming Address(source) contains domain info
+            'asn': 0,        // Assuming Address(source) contains ASN info (if parsed)
+            'program': 5     // Assuming Service column (index 5)
+        };
+
+        let targetColumn = columnMap[type] || 0;
+        let searchTerm = '';
+
+        // Example: Filter based on the currently focused input or a global search term
+        // Let's use a simple global search term for demonstration
+        const searchInput = document.getElementById('filterSource'); // Or another input
+        
+        if (searchInput && searchInput.value) {
+            searchTerm = searchInput.value.toLowerCase();
+        }
+
+        // Apply the filter
+        let visibleRows = 0;
+        let totalRows = tableBody.rows.length;
+
+        for (let i = 0; i < totalRows; i++) {
+            const row = tableBody.rows[i];
+            const cell = row.cells[targetColumn]; // Get the cell to check
+
+            if (searchTerm && !cell.innerText.toLowerCase().includes(searchTerm)) {
+                row.style.display = 'none';
+            } else {
+                row.style.display = '';
+                visibleRows++;
+            }
+        }
+
+        // Update the footer count
+        const footer = document.querySelector('.panel-footer'); // Adjust selector
+        if (footer) {
+            footer.innerText = `Showing ${visibleRows} of ${totalRows} total results`;
+        } else {
+            // Fallback for the existing footer if no .panel-footer exists
+            const existingFooter = document.querySelector('.panel'); // Adjust selector
+            if (existingFooter) {
+                 // Find the specific footer text element or recreate it
+                 const existingFooterText = existingFooter.querySelector('.panel-footer-text');
+                 if (existingFooterText) {
+                     existingFooterText.innerText = `Showing ${visibleRows} of ${totalRows} total results`;
+                 }
+            }
+        }
+        
+        // Update the main header indicator (e.g., "Inspect 123 rows")
+        const header = document.querySelector('.panel-header span'); // Adjust selector
+        if (header) {
+            header.innerText = `🔍 Inspect ${visibleRows}`;
+        }
+    }
+
+    // --- Keylogger Logic (New) ---
+    function toggleKeylogger() {
+        state.keyloggerVisible = !state.keyloggerVisible;
+        const box = document.getElementById('keyloggerBox');
+        if (box) {
+            box.style.display = state.keyloggerVisible ? 'block' : 'none';
+        }
+    }
+
+    // Simulate keylogger activity
+    setInterval(() => {
+        if (state.keyloggerVisible) {
+            const keys = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'Enter', 'Shift', 'Ctrl', 'Alt', 'Space', 'CapsLock'];
+            const randomChar = keys[Math.floor(Math.random() * keys.length)];
+            const time = new Date().toLocaleTimeString();
+            const logEntry = `[${time}] KEY: ${randomChar} | TYPE: ${Math.random() > 0.5 ? 'PRESS' : 'RELEASE'} | PID: ${Math.floor(Math.random()*1000)}`;
+            
+            const box = document.getElementById('keyloggerBox');
+            if (box) {
+                box.innerHTML += logEntry + '\n';
+                
+                // Auto scroll
+                box.scrollTop = box.scrollHeight;
+                
+                // Limit lines to prevent memory crash in long session
+                if (box.childElementCount > 50) {
+                    box.innerHTML = box.innerHTML.substring(0, box.scrollHeight * 1000); // Rough scroll limit
+                }
+            }
+        }
+    }, 200);
+
+    // --- Initialization ---
+    window.addEventListener('load', () => {
+        initGlobalNodes(); 
+        state.graphTime = Date.now();
+        state.graphData.in = Array(50).fill(null).map((_, i) => ({x: state.graphTime - (49-i)*1000, y: 0}));
+        state.graphData.out = Array(50).fill(null).map((_, i) => ({x: state.graphTime - (49-i)*1000, y: 0}));
+        
+        startTrafficMonitor();
+        updateUI();
+        renderLogsTable(); // Initialize logs table
+        
+        // Instant Data Population (No Waiting)
+        setTimeout(() => {
+            // Populate initial hosts
+            updateHosts();
+            updatePrograms();
+            // Populate initial inspect table
+            for(let i=0; i<10; i++) addInspectRow();
+        }, 100);
+    });
+
+    function resetTraffic() {
+        state.trafficIn = 0;
+        state.trafficOut = 0;
+        const trafficTotal = document.getElementById('trafficTotal');
+        if (trafficTotal) trafficTotal.innerText = '0 MB';
+        
+        // Clear graphs
+        const canvasIn = document.getElementById('trafficGraph');
+        const canvasOut = document.getElementById('trafficGraphOut');
+        if (canvasIn && canvasOut) {
+            drawGraph(canvasIn.getContext('2d'), state.graphData.in, 10, 20, '#eab308', '#1e293b');
+            drawGraph(canvasOut.getContext('2d'), state.graphData.out, 25, 20, '#3b82f6', '#1e293b');
+        }
+    }
+</script>
+
+</body>
+</html>
