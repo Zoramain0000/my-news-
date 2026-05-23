@@ -1,0 +1,1129 @@
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>zerodays patch // Global Cross-Conn Monitor</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href='data:application/manifest+json;base64,eyJuYW1lIjoiWmVybyBEYXlzIE1vbml0b3IiLCJzaG9ydF9uYW1lIjoiWmVyb0RheXMiLCJzdGFydF91cmwiOiIuIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzBmMTcyYSIsInRoZW1lX2NvbG9yIjoiI2ZiYmYyNCIsImljb25zIjpbeyJzcmMiOiJodHRwczovL2ltZy5pY29uczhjb20vY29sb3IvNTEyL3NlY3VyaXR5LWdhcmFudGVlZC5wbmciLCJzaXplcyI6IjUxMng1MTIiLCJ0eXBlIjoiaW1hZ2UvcG5nIn1dfQ=='>
+
+    <style>
+        /* --- CORE VARIABLES --- */
+        :root {
+            --bg-dark: #0f172a;
+            --bg-panel: #1e293b;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #fbbf24;
+            --accent-hover: #f59e0b;
+            --bar-in: #eab308;
+            --bar-out: #3b82f6;
+            --whatsapp: #25D366;
+            --border: #334155;
+            --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: 'Courier New', monospace;
+        }
+
+        * { box-sizing: border-box; outline: none; }
+
+        body {
+            margin: 0;
+            font-family: var(--font-main);
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevents body scroll */
+        }
+
+        /* --- SCROLLBAR CUSTOMIZATION --- */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* --- HEADER --- */
+        header {
+            background-color: var(--accent);
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            color: #0f172a;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 100;
+            flex-shrink: 0; /* Prevents shrinking */
+            user-select: none;
+            height: 45px; /* Fixed Height */
+        }
+
+        .header-center { 
+            display: flex; 
+            gap: 8px; 
+            align-items: center; 
+            flex-wrap: wrap; 
+            justify-content: center;
+        }
+
+        .brand-title { display: flex; align-items: center; gap: 10px; font-size: 18px; }
+        .live-status { 
+            min-width: 60px; text-align: center; 
+            font-size: 14px; animation: pulse-text 2s infinite;
+        }
+
+        @keyframes pulse-text { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .icon-btn {
+            background: rgba(15, 23, 42, 0.1);
+            border: 1px solid rgba(15, 23, 42, 0.2);
+            border-radius: 4px;
+            cursor: pointer;
+            color: #0f172a;
+            padding: 4px 8px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .icon-btn:hover { background: rgba(255,255,255,0.5); transform: translateY(-1px); }
+        .icon-btn:active { transform: scale(0.95); }
+
+        /* --- MAIN LAYOUT --- */
+        main {
+            flex: 1; /* Takes remaining height */
+            display: flex;
+            padding: 10px;
+            gap: 10px;
+            overflow: hidden; /* CRITICAL: Prevents main scroll */
+            position: relative;
+        }
+
+        .panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            position: absolute;
+            top: 10px; left: 10px; right: 10px; bottom: 10px;
+            transition: opacity 0.2s ease;
+            overflow: hidden; /* CRITICAL: Contains children */
+        }
+        
+        .panel.hidden { display: none !important; }
+
+        .panel-content {
+            flex: 1; /* Fills space within panel */
+            padding: 10px;
+            overflow-y: auto; /* Scrollable content area */
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .panel-header {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 600;
+            flex-shrink: 0; /* Header stays fixed */
+        }
+
+        /* --- UTILITY CLASSES --- */
+        .badge { background: var(--accent); color: #0f172a; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+        .btn-primary { background: var(--accent); color: #0f172a; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-danger { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
+        .btn-danger:hover { background: #dc2626; }
+        
+        /* --- FIXED HEIGHT CONTAINERS --- */
+        
+        /* 1. Stats & Graphs */
+        .stats-graph-layout { display: flex; gap: 10px; min-height: 180px; flex-shrink: 0; }
+        .stats-box { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 160px; }
+        .stat-group { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; border: 1px solid var(--border); }
+        .traffic-circle { display: flex; align-items: center; justify-content: center; height: 50px; margin: 5px 0; }
+        .traffic-value { font-size: 24px; font-weight: bold; font-family: var(--font-mono); color: var(--text-main); }
+        
+        .graph-container { flex: 2; display: flex; flex-direction: column; gap: 8px; min-width: 300px; }
+        .graph-wrapper { flex: 1; position: relative; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; min-height: 70px; }
+        .graph-label { position: absolute; top: 5px; left: 5px; font-size: 10px; color: var(--text-muted); z-index: 2; pointer-events: none; }
+        canvas { width: 100%; height: 100%; display: block; }
+
+        /* 2. Matrix & Map */
+        .vis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 220px; flex-shrink: 0; } /* Fixed height */
+        
+        .data-matrix-container, .global-map-container {
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Contains scroll */
+            height: 100%; /* Fills the grid cell */
+        }
+
+        .section-header {
+            background: rgba(255,255,255,0.05);
+            padding: 4px 8px;
+            font-size: 10px;
+            color: var(--accent);
+            font-family: var(--font-mono);
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            flex-shrink: 0; /* Prevents header from shrinking */
+        }
+
+        /* Matrix Specifics */
+        .matrix-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
+            gap: 1px; 
+            background: var(--border); 
+            flex: 1; 
+            overflow-y: auto; /* Internal Scroll */
+        }
+        .matrix-cell { background: var(--bg-panel); padding: 4px; font-size: 9px; display: flex; justify-content: space-between; font-family: var(--font-mono); }
+        .matrix-cell.active { background: rgba(37, 211, 102, 0.1); color: var(--whatsapp); }
+        .matrix-cell.standby { color: var(--text-muted); opacity: 0.7; }
+
+        /* Map Specifics */
+        .map-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); 
+            gap: 1px; 
+            padding: 5px;
+            flex: 1; 
+            overflow-y: auto; /* Internal Scroll */
+        }
+        .map-node { 
+            background: rgba(255,255,255,0.05); 
+            border: 1px solid #334155; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 9px; 
+            color: var(--text-muted); 
+            padding: 4px 0;
+        }
+        .map-node.active { background: rgba(59, 130, 246, 0.2); border-color: var(--bar-out); color: var(--bar-out); }
+        .map-node.pulse { animation: pulse-node 2s infinite; }
+        @keyframes pulse-node { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 70% { box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
+
+        /* 3. Lists (Hosts, Services) */
+        .lists-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; height: 160px; flex-shrink: 0; } /* Fixed height */
+        .split-panel { 
+            background: rgba(0,0,0,0.2); 
+            border: 1px solid var(--border); 
+            border-radius: 4px; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+            height: 100%; /* Fills grid cell */
+        }
+        .split-header { padding: 6px; background: rgba(255,255,255,0.05); font-size: 11px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; flex-shrink: 0;}
+        .split-body { flex: 1; overflow-y: auto; } /* Scrollable area */
+        .split-row { display: flex; align-items: center; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 10px; }
+        .split-row:hover { background: rgba(255,255,255,0.05); }
+        .split-icon { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.1); border-radius: 3px; margin-right: 6px; font-size: 9px; flex-shrink: 0; }
+        .split-info { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .split-bar { width: 35px; height: 3px; background: rgba(255,255,255,0.1); margin-right: 6px; border-radius: 2px; overflow: hidden; flex-shrink: 0;}
+        .split-bar-fill { height: 100%; width: 0%; transition: width 0.5s; }
+        .split-val { width: 35px; text-align: right; font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); flex-shrink: 0;}
+
+        /* 4. WhatsApp & Keylogger (Bottom) */
+        .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 140px; flex-shrink: 0; } /* Fixed height */
+        
+        .wa-section { background: #051f12; border: 1px solid #25D366; border-radius: 4px; display: flex; flex-direction: column; padding: 8px; height: 100%; overflow: hidden;}
+        .wa-header { color: var(--whatsapp); font-size: 11px; font-weight: bold; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+        .wa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow-y: auto; flex: 1; } /* Internal Scroll */
+        .wa-item { background: rgba(37, 211, 102, 0.05); padding: 5px; border-radius: 3px; border: 1px solid rgba(37, 211, 102, 0.2); }
+        .wa-label { font-size: 9px; color: #4ade80; display: block; margin-bottom: 2px; }
+        .wa-val { font-family: var(--font-mono); font-size: 10px; color: var(--text-main); }
+
+        /* --- KEYLOGGER FIX --- */
+        .key-section { background: #0c0a0a; border: 1px solid #444; border-radius: 4px; display: flex; flex-direction: column; padding: 8px; height: 100%; overflow: hidden;}
+        .key-header { color: var(--accent); font-size: 11px; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; flex-shrink: 0; }
+        .key-box { 
+            flex: 1; /* Takes remaining space */
+            background: rgba(0,0,0,0.5); 
+            border: 1px solid #333; 
+            border-radius: 2px; 
+            padding: 5px; 
+            font-family: var(--font-mono); 
+            font-size: 9px; 
+            color: var(--accent); 
+            overflow-y: auto; /* INTERNAL SCROLL ONLY */
+            overflow-x: hidden;
+            white-space: pre-wrap; 
+            word-break: break-all;
+        }
+        .key-box::-webkit-scrollbar { width: 4px; }
+
+        /* --- TAB: INSPECT --- */
+        .filter-bar { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; flex-shrink: 0; }
+        .filter-input { background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text-main); padding: 5px; border-radius: 4px; font-size: 12px; flex: 1; }
+        .table-container { flex: 1; overflow: auto; border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; min-width: 600px; }
+        th { text-align: left; padding: 8px; background: rgba(0,0,0,0.3); color: var(--text-muted); border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+        td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        tr:hover td { background: rgba(255,255,255,0.03); }
+        .col-mono { font-family: var(--font-mono); }
+
+        /* --- TAB: LOGS --- */
+        .logs-toolbar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 10px; flex-shrink: 0; }
+
+        /* --- FOOTER --- */
+        footer {
+            background: var(--bg-panel);
+            color: var(--text-muted);
+            padding: 4px 15px;
+            font-size: 10px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            height: 30px; /* Fixed Height */
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 900px) {
+            .stats-graph-layout { flex-direction: column; height: auto; }
+            .vis-grid { grid-template-columns: 1fr; height: auto; min-height: 300px; }
+            .lists-grid { grid-template-columns: 1fr; height: auto; min-height: 200px; }
+            .bottom-grid { grid-template-columns: 1fr; height: auto; min-height: 200px; }
+            .header-center { gap: 4px; }
+            .icon-btn span { display: none; } 
+            .icon-btn { padding: 6px; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="brand-title">
+        <button class="icon-btn" onclick="switchTab('overview')">🏠</button>
+        <div style="font-size: 20px;">🎩</div>
+        <div style="font-size: 16px; font-weight: 800; letter-spacing: 0.5px;">ZERODAYS</div>
+    </div>
+
+    <div class="header-center">
+        <button class="icon-btn" onclick="switchTab('overview')" title="Overview">📊 <span>Overview</span></button>
+        <button class="icon-btn" onclick="switchTab('inspect')" title="Inspect">🔍 <span>Inspect</span></button>
+        <button class="icon-btn" onclick="switchTab('notif')" title="Notifications">🔔 <span>Notif</span></button>
+        <button class="icon-btn" onclick="switchTab('logs')" title="Logs">📋 <span>Logs</span></button>
+        <div style="width: 1px; height: 20px; background: rgba(0,0,0,0.1); margin: 0 5px;"></div>
+        <button class="icon-btn" onclick="switchTab('settings')">⚙️</button>
+        <button class="icon-btn" onclick="switchTab('bookmarks')">📖</button>
+        <button class="icon-btn" onclick="switchTab('rss')">📡</button>
+        <button class="icon-btn" onclick="switchTab('heart')">❤️</button>
+        <button class="icon-btn" onclick="resetTraffic()">🔄</button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="live-status" id="headerStatus">LIVE</div>
+        <button class="icon-btn" style="background:none; border:none; padding:0;" onclick="window.close()">✖</button>
+    </div>
+</header>
+
+<main>
+    <!-- OVERVIEW TAB -->
+    <div id="tab-overview" class="panel">
+        <div class="panel-header">
+            <span>GLOBAL CROSS-CONN MONITOR</span>
+            <div style="display: flex; gap: 10px;">
+                <span>📡 <span class="badge" id="badgeStatus">ONLINE</span></span>
+                <span>🔔 <span class="badge" id="notifBadge">0</span></span>
+            </div>
+        </div>
+
+        <div class="panel-content">
+            
+            <!-- TOP SECTION: STATS & GRAPHS -->
+            <div class="stats-graph-layout">
+                <div class="stats-box">
+                    <div class="stat-group">
+                        <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Interface</div>
+                        <div style="font-family: var(--font-mono); font-weight: bold; color: var(--text-main);" id="adapterName">en0</div>
+                    </div>
+                    <div class="stat-group" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                        <div style="font-size: 10px; color: var(--text-muted);">Total Traffic</div>
+                        <div class="traffic-circle">
+                            <span class="traffic-value" id="trafficTotal">0 MB</span>
+                        </div>
+                        <div style="font-size: 10px; display: flex; gap: 10px; margin-top: 5px;">
+                            <span style="color: var(--bar-in);">● IN</span>
+                            <span style="color: var(--bar-out);">● OUT</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="graph-container">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 5px;">Bandwidth Utilization</div>
+                    <div class="graph-wrapper">
+                        <span class="graph-label">INCOMING</span>
+                        <canvas id="graphIn"></canvas>
+                    </div>
+                    <div class="graph-wrapper">
+                        <span class="graph-label">OUTGOING</span>
+                        <canvas id="graphOut"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MIDDLE SECTION: MATRIX & MAP -->
+            <div class="vis-grid">
+                <!-- Snippet 1: Matrix -->
+                <div class="data-matrix-container">
+                    <div class="section-header">
+                        <span>GLOBAL DATA MATRIX</span>
+                        <span>LIVE</span>
+                    </div>
+                    <div class="matrix-grid" id="matrixGrid">
+                        <!-- JS Generated -->
+                    </div>
+                </div>
+                <!-- Snippet 2: Map -->
+                <div class="global-map-container">
+                    <div class="section-header">
+                        <span>GLOBAL NODE STATUS</span>
+                        <span>195 NODES</span>
+                    </div>
+                    <div class="map-grid" id="mapGrid">
+                        <!-- JS Generated -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOWER MIDDLE: NETWORK LISTS -->
+            <div class="lists-grid">
+                <div class="split-panel">
+                    <div class="split-header"><span>Network Hosts</span> <span>▼</span></div>
+                    <div class="split-body" id="hostsList"></div>
+                </div>
+                <div class="split-panel">
+                    <div class="split-header"><span>Active Services</span> <span>▼</span></div>
+                    <div class="split-body" id="servicesList"></div>
+                </div>
+                <div class="split-panel">
+                    <div class="split-header"><span>Programs</span> <span>▼</span></div>
+                    <div class="split-body" id="programsList"></div>
+                </div>
+            </div>
+
+            <!-- BOTTOM: WHATSAPP & KEYLOGGER -->
+            <div class="bottom-grid">
+                <div class="wa-section">
+                    <div class="wa-header"><span>●</span> WHATSAPP LIVE INTERCEPT</div>
+                    <div class="wa-grid">
+                        <div class="wa-item"><span class="wa-label">Location</span><span class="wa-val" id="waLoc">Scanning...</span></div>
+                        <div class="wa-item"><span class="wa-label">Phone (E.164)</span><span class="wa-val" id="waPhone">--</span></div>
+                        <div class="wa-item"><span class="wa-label">Connection</span><span class="wa-val" id="waConn">--</span></div>
+                        <div class="wa-item"><span class="wa-label">Last Sync</span><span class="wa-val" id="waSync">--</span></div>
+                    </div>
+                </div>
+                <div class="key-section">
+                    <div class="key-header">
+                        <span>⌨️ KEYLOGGER CAPTURE</span>
+                        <button class="btn-primary" style="padding: 1px 5px; font-size: 9px;" onclick="toggleKeylog()">HIDE</button>
+                    </div>
+                    <!-- Scroll is contained strictly here -->
+                    <div class="key-box" id="keylogBox"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INSPECT TAB -->
+    <div id="tab-inspect" class="panel hidden">
+        <div class="panel-header">
+            <span>DEEP PACKET INSPECTION</span>
+        </div>
+        <div class="panel-content">
+            <div class="filter-bar">
+                <input type="text" class="filter-input" placeholder="Source IP" id="fSource" onkeyup="renderInspectTable()">
+                <input type="text" class="filter-input" placeholder="Dest IP" id="fDest" onkeyup="renderInspectTable()">
+                <input type="text" class="filter-input" placeholder="Protocol" id="fProto" onkeyup="renderInspectTable()">
+                <input type="text" class="filter-input" placeholder="Service" id="fSvc" onkeyup="renderInspectTable()">
+            </div>
+            <div class="table-container">
+                <table id="inspectTable">
+                    <thead>
+                        <tr>
+                            <th>Source IP</th>
+                            <th>Port</th>
+                            <th>Destination IP</th>
+                            <th>Port</th>
+                            <th>Protocol</th>
+                            <th>Service</th>
+                            <th>Bytes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inspectBody"></tbody>
+                </table>
+            </div>
+            <div style="font-size: 10px; color: var(--text-muted); padding: 5px;" id="inspectStats">Packets: 0</div>
+        </div>
+    </div>
+
+    <!-- LOGS TAB -->
+    <div id="tab-logs" class="panel hidden">
+        <div class="panel-header">
+            <span>SYSTEM LOGS / EXPORT</span>
+        </div>
+        <div class="panel-content">
+            <div class="logs-toolbar">
+                <div style="color: var(--text-muted); font-size: 12px; margin-right: auto; align-self: center;">
+                    Records: <span id="logCount" style="color: var(--accent);">0</span>
+                </div>
+                <button class="btn-primary" onclick="downloadLogs()">⬇ CSV Export</button>
+                <button class="btn-danger" onclick="clearLogs()">🗑 Clear</button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Location</th>
+                            <th>Target ID</th>
+                            <th>Conn</th>
+                            <th>Traffic</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATIONS TAB -->
+    <div id="tab-notif" class="panel hidden">
+        <div class="panel-header"><span>NOTIFICATIONS</span></div>
+        <div class="panel-content">
+            <div id="notifList" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="tab-settings" class="panel hidden">
+        <div class="panel-header"><span>SYSTEM SETTINGS</span></div>
+        <div class="panel-content" style="max-width: 600px; margin: 0 auto;">
+            <div style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 6px; border: 1px solid var(--border);">
+                <h3 style="margin-top: 0; color: var(--accent);">Configuration</h3>
+                <div style="margin-bottom: 15px; display: flex; justify-content: space-between;">
+                    <span>Dark Mode</span> <span style="color: var(--whatsapp);">Enabled</span>
+                </div>
+                <div style="margin-bottom: 15px; display: flex; justify-content: space-between;">
+                    <span>Update Interval</span> <span>1000ms</span>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">Log Level</label>
+                    <select style="width: 100%; padding: 8px; background: var(--bg-dark); color: var(--text-main); border: 1px solid var(--border); border-radius: 4px;">
+                        <option>Debug</option>
+                        <option>Info</option>
+                        <option>Warning</option>
+                    </select>
+                </div>
+                <button class="btn-primary" style="width: 100%; padding: 10px;" onclick="alert('Settings saved to local storage.')">Save Changes</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- BOOKMARKS, RSS, HEART TABS (Simplified) -->
+    <div id="tab-bookmarks" class="panel hidden">
+        <div class="panel-header"><span>BOOKMARKS</span></div>
+        <div class="panel-content">
+            <div style="padding: 10px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; margin-bottom: 5px;" onclick="switchTab('overview')">🏠 Global Dashboard</div>
+            <div style="padding: 10px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer;" onclick="switchTab('inspect')">🔍 Deep Inspect</div>
+        </div>
+    </div>
+
+    <div id="tab-rss" class="panel hidden">
+        <div class="panel-header"><span>RSS FEEDS</span></div>
+        <div class="panel-content">
+            <div style="padding: 15px; text-align: center; color: var(--text-muted);">Fetching live threat intelligence feeds...</div>
+            <div style="padding: 10px; border-bottom: 1px solid var(--border);">📡 TechCrunch: AI Regulation Update</div>
+            <div style="padding: 10px; border-bottom: 1px solid var(--border);">📡 The Verge: New Zero-Day Found in...</div>
+        </div>
+    </div>
+
+    <div id="tab-heart" class="panel hidden">
+        <div class="panel-header"><span>FAVORITES</span></div>
+        <div class="panel-content">
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">
+                <div style="background: rgba(234, 179, 8, 0.1); padding: 10px; border: 1px solid var(--accent); border-radius: 4px;">
+                    <strong>192.168.1.1</strong><br><span style="font-size: 10px; color: var(--text-muted);">Gateway</span>
+                </div>
+                <div style="background: rgba(59, 130, 246, 0.1); padding: 10px; border: 1px solid var(--bar-out); border-radius: 4px;">
+                    <strong>8.8.8.8</strong><br><span style="font-size: 10px; color: var(--text-muted);">Google DNS</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<footer>
+    <div>zerodays patch v2.4.1 // <span style="color: var(--whatsapp);">Secure Connection</span></div>
+    <div>Designed/build by Zorathedev00 Ai</div>
+</footer>
+
+<script>
+    /* --- DATA SOURCES --- */
+    const countries = [
+  { code: "AF", dial: "+93" }, { code: "AL", dial: "+355" }, { code: "DZ", dial: "+213" }, { code: "AD", dial: "+376" }, { code: "AO", dial: "+244" },
+  { code: "AG", dial: "+1-268" }, { code: "AR", dial: "+54" }, { code: "AM", dial: "+374" }, { code: "AU", dial: "+61" }, { code: "AT", dial: "+43" },
+  { code: "AZ", dial: "+994" }, { code: "BS", dial: "+1-242" }, { code: "BH", dial: "+973" }, { code: "BD", dial: "+880" }, { code: "BB", dial: "+1-246" },
+  { code: "BY", dial: "+375" }, { code: "BE", dial: "+32" }, { code: "BZ", dial: "+501" }, { code: "BJ", dial: "+229" }, { code: "BT", dial: "+975" },
+  { code: "BO", dial: "+591" }, { code: "BA", dial: "+387" }, { code: "BW", dial: "+267" }, { code: "BR", dial: "+55" }, { code: "BN", dial: "+673" },
+  { code: "BG", dial: "+359" }, { code: "BF", dial: "+226" }, { code: "BI", dial: "+257" }, { code: "KH", dial: "+855" }, { code: "CM", dial: "+237" },
+  { code: "CA", dial: "+1" }, { code: "CV", dial: "+238" }, { code: "CF", dial: "+236" }, { code: "TD", dial: "+235" }, { code: "CL", dial: "+56" },
+  { code: "CN", dial: "+86" }, { code: "CO", dial: "+57" }, { code: "KM", dial: "+269" }, { code: "CG", dial: "+242" }, { code: "CD", dial: "+243" },
+  { code: "CR", dial: "+506" }, { code: "CI", dial: "+225" }, { code: "HR", dial: "+385" }, { code: "CU", dial: "+53" }, { code: "CY", dial: "+357" },
+  { code: "CZ", dial: "+420" }, { code: "DK", dial: "+45" }, { code: "DJ", dial: "+253" }, { code: "DM", dial: "+1-767" }, { code: "DO", dial: "+1-809" },
+  { code: "EC", dial: "+593" }, { code: "EG", dial: "+20" }, { code: "SV", dial: "+503" }, { code: "GQ", dial: "+240" }, { code: "ER", dial: "+291" },
+  { code: "EE", dial: "+372" }, { code: "SZ", dial: "+268" }, { code: "ET", dial: "+251" }, { code: "FJ", dial: "+679" }, { code: "FI", dial: "+358" },
+  { code: "FR", dial: "+33" }, { code: "GA", dial: "+241" }, { code: "GM", dial: "+220" }, { code: "GE", dial: "+995" }, { code: "DE", dial: "+49" },
+  { code: "GH", dial: "+233" }, { code: "GR", dial: "+30" }, { code: "GD", dial: "+1-473" }, { code: "GT", dial: "+502" }, { code: "GN", dial: "+224" },
+  { code: "GW", dial: "+245" }, { code: "GY", dial: "+592" }, { code: "HT", dial: "+509" }, { code: "HN", dial: "+504" }, { code: "HU", dial: "+36" },
+  { code: "IS", dial: "+354" }, { code: "IN", dial: "+91" }, { code: "ID", dial: "+62" }, { code: "IR", dial: "+98" }, { code: "IQ", dial: "+964" },
+  { code: "IE", dial: "+353" }, { code: "IL", dial: "+972" }, { code: "IT", dial: "+39" }, { code: "JM", dial: "+1-876" }, { code: "JP", dial: "+81" },
+  { code: "JO", dial: "+962" }, { code: "KZ", dial: "+7" }, { code: "KE", dial: "+254" }, { code: "KI", dial: "+686" }, { code: "KP", dial: "+850" },
+  { code: "KR", dial: "+82" }, { code: "KW", dial: "+965" }, { code: "KG", dial: "+996" }, { code: "LA", dial: "+856" }, { code: "LV", dial: "+371" },
+  { code: "LB", dial: "+961" }, { code: "LS", dial: "+266" }, { code: "LR", dial: "+231" }, { code: "LY", dial: "+218" }, { code: "LI", dial: "+423" },
+  { code: "LT", dial: "+370" }, { code: "LU", dial: "+352" }, { code: "MG", dial: "+261" }, { code: "MW", dial: "+265" }, { code: "MY", dial: "+60" },
+  { code: "MV", dial: "+960" }, { code: "ML", dial: "+223" }, { code: "MT", dial: "+356" }, { code: "MH", dial: "+692" }, { code: "MR", dial: "+222" },
+  { code: "MU", dial: "+230" }, { code: "MX", dial: "+52" }, { code: "FM", dial: "+691" }, { code: "MD", dial: "+373" }, { code: "MC", dial: "+377" },
+  { code: "MN", dial: "+976" }, { code: "ME", dial: "+382" }, { code: "MA", dial: "+212" }, { code: "MZ", dial: "+258" }, { code: "MM", dial: "+95" },
+  { code: "NA", dial: "+264" }, { code: "NR", dial: "+674" }, { code: "NP", dial: "+977" }, { code: "NL", dial: "+31" }, { code: "NZ", dial: "+64" },
+  { code: "NI", dial: "+505" }, { code: "NE", dial: "+227" }, { code: "NG", dial: "+234" }, { code: "MK", dial: "+389" }, { code: "NO", dial: "+47" },
+  { code: "OM", dial: "+968" }, { code: "PK", dial: "+92" }, { code: "PW", dial: "+680" }, { code: "PA", dial: "+507" }, { code: "PG", dial: "+675" },
+  { code: "PY", dial: "+595" }, { code: "PE", dial: "+51" }, { code: "PH", dial: "+63" }, { code: "PL", dial: "+48" }, { code: "PT", dial: "+351" },
+  { code: "QA", dial: "+974" }, { code: "RO", dial: "+40" }, { code: "RU", dial: "+7" }, { code: "RW", dial: "+250" }, { code: "KN", dial: "+1-869" },
+  { code: "LC", dial: "+1-758" }, { code: "VC", dial: "+1-784" }, { code: "WS", dial: "+685" }, { code: "SM", dial: "+378" }, { code: "ST", dial: "+239" },
+  { code: "SA", dial: "+966" }, { code: "SN", dial: "+221" }, { code: "RS", dial: "+381" }, { code: "SC", dial: "+248" }, { code: "SL", dial: "+232" },
+  { code: "SG", dial: "+65" }, { code: "SK", dial: "+421" }, { code: "SI", dial: "+386" }, { code: "SB", dial: "+677" }, { code: "SO", dial: "+252" },
+  { code: "ZA", dial: "+27" }, { code: "SS", dial: "+211" }, { code: "ES", dial: "+34" }, { code: "LK", dial: "+94" }, { code: "SD", dial: "+249" },
+  { code: "SR", dial: "+597" }, { code: "SE", dial: "+46" }, { code: "CH", dial: "+41" }, { code: "SY", dial: "+963" }, { code: "TW", dial: "+886" },
+  { code: "TJ", dial: "+992" }, { code: "TZ", dial: "+255" }, { code: "TH", dial: "+66" }, { code: "TL", dial: "+670" }, { code: "TG", dial: "+228" },
+  { code: "TO", dial: "+676" }, { code: "TT", dial: "+1-868" }, { code: "TN", dial: "+216" }, { code: "TR", dial: "+90" }, { code: "TM", dial: "+993" },
+  { code: "TV", dial: "+688" }, { code: "UG", dial: "+256" }, { code: "UA", dial: "+380" }, { code: "AE", dial: "+971" }, { code: "GB", dial: "+44" },
+  { code: "US", dial: "+1" }, { code: "UY", dial: "+598" }, { code: "UZ", dial: "+998" }, { code: "VU", dial: "+678" }, { code: "VA", dial: "+379" },
+  { code: "VE", dial: "+58" }, { code: "VN", dial: "+84" }, { code: "YE", dial: "+967" }, { code: "ZM", dial: "+260" }, { code: "ZW", dial: "+263" }
+];
+
+    const flags = [
+      '🇦🇫','🇦🇱','🇩🇿','🇦🇩','🇦🇴','🇦🇬','🇦🇷','🇦🇲','🇦🇺','🇦🇹','🇦🇿','🇧🇸','🇧🇭','🇧🇩','🇧🇧','🇧🇾','🇧🇪','🇧🇿','🇧🇯','🇧🇹',
+      '🇧🇴','🇧🇦','🇧🇼','🇧🇷','🇧🇳','🇧🇬','🇧🇫','🇧🇮','🇨🇻','🇰🇭','🇨🇲','🇨🇦','🇨🇫','🇹🇩','🇨🇱','🇨🇳','🇨🇴','🇰🇲','🇨🇬','🇨🇷',
+      '🇭🇷','🇨🇺','🇨🇾','🇨🇿','🇩🇰','🇩🇯','🇩🇲','🇩🇴','🇪🇨','🇪🇬','🇸🇻','🇬🇶','🇪🇷','🇪🇪','🇸🇿','🇪🇹','🇫🇯','🇫🇮','🇫🇷','🇬🇦',
+      '🇬🇲','🇬🇪','🇩🇪','🇬🇭','🇬🇷','🇬🇩','🇬🇹','🇬🇳','🇬🇼','🇬🇾','🇭🇹','🇭🇳','🇭🇺','🇮🇸','🇮🇳','🇮🇩','🇮🇷','🇮🇶','🇮🇪','🇮🇱',
+      '🇮🇹','🇯🇲','🇯🇵','🇯🇴','🇰🇿','🇰🇪','🇰🇮','🇰🇵','🇰🇷','🇰🇼','🇰🇬','🇱🇦','🇱🇻','🇱🇧','🇱🇸','🇱🇷','🇱🇾','🇱🇮','🇱🇹','🇱🇺',
+      '🇲🇬','🇲🇼','🇲🇾','🇲🇻','🇲🇱','🇲🇹','🇲🇭','🇲🇷','🇲🇺','🇲🇽','🇫🇲','🇲🇩','🇲🇨','🇲🇳','🇲🇪','🇲🇦','🇲🇿','🇲🇲','🇳🇦','🇳🇷',
+      '🇳🇵','🇳🇱','🇳🇿','🇳🇮','🇳🇪','🇳🇬','🇲🇰','🇳🇴','🇴🇲','🇵🇰','🇵🇼','🇵🇸','🇵🇦','🇵🇬','🇵🇾','🇵🇪','🇵🇭','🇵🇱','🇵🇹','🇶🇦',
+      '🇷🇴','🇷🇺','🇷🇼','🇰🇳','🇱🇨','🇻🇨','🇼🇸','🇸🇲','🇸🇹','🇸🇦','🇸🇳','🇷🇸','🇸🇨','🇸🇱','🇸🇬','🇸🇰','🇸🇮','🇸🇧','🇸🇴','🇿🇦',
+      '🇸🇸','🇪🇸','🇱🇰','🇸🇩','🇸🇷','🇸🇪','🇨🇭','🇸🇾','🇹🇼','🇹🇯','🇹🇿','🇹🇭','🇹🇱','🇹🇬','🇹🇴','🇹🇹','🇹🇳','🇹🇷','🇹🇲','🇹🇻',
+      '🇺🇬','🇺🇦','🇦🇪','🇬🇧','🇺🇸','🇺🇾','🇺🇿','🇻🇺','🇻🇦','🇻🇪','🇻🇳','🇾🇪','🇿🇲','🇿🇼'
+    ];
+
+    const services = ['Zoom', 'Telegram', 'Slack', 'Google Chrome', 'Thunderbird', 'AWS', 'Apple', 'GitHub', 'Fastly', 'Teams', 'Discord', 'WhatsApp', 'Signal', 'Facebook', 'Instagram', 'TikTok', 'Snapchat', 'LinkedIn', 'Reddit', 'Tumblr', 'YouTube', 'Netflix', 'Spotify', 'Twitch', 'Steam', 'Epic Games', 'PlayStation', 'Xbox', 'Nintendo', 'Roblox', 'Minecraft', 'OpenAI', 'ChatGPT', 'Notion', 'Trello', 'Asana', 'ClickUp', 'Dropbox', 'Drive', 'OneDrive', 'iCloud', 'Mega', 'Box', 'Canva', 'Figma', 'Adobe', 'Blender', 'AutoCAD', 'Unity', 'Unreal', 'VS Code', 'IntelliJ', 'PyCharm', 'Android', 'Xcode', 'Docker', 'Kubernetes', 'Jenkins', 'GitLab', 'Vercel', 'Netlify', 'DigitalOcean', 'Linode', 'Cloudflare', 'NGINX', 'Apache', 'MySQL', 'PostgreSQL', 'Redis', 'MongoDB', 'Firebase', 'Supabase', 'OpenVPN', 'NordVPN', 'ExpressVPN', 'ProtonVPN', 'Kaspersky', 'Bitdefender', 'Norton', 'Malwarebytes', 'Wireshark', 'Metasploit', 'Burp Suite', 'Nmap', 'Kali', 'Ubuntu', 'Debian', 'Arch', 'Fedora', 'CentOS', 'Windows', 'macOS', 'Android', 'iOS', 'Opera', 'Firefox', 'Safari', 'Brave', 'Tor', 'DuckDuckGo', 'Bing', 'Gmail', 'Outlook', 'Proton', 'Zoho', 'cPanel', 'WordPress', 'Shopify', 'WooCommerce', 'Magento', 'Wix', 'Medium', 'Ghost', 'Quora', 'StackOverflow', 'Dev.to', 'CodePen', 'Replit', 'LeetCode', 'HackerRank', 'Coursera', 'Udemy', 'PayPal', 'Stripe', 'Coinbase', 'Binance', 'MetaMask', 'Ledger', 'TradingView', 'Robinhood', 'CNN', 'BBC', 'Reuters', 'NYTimes', 'Wikipedia', 'IMDb', 'Disney+', 'Hulu', 'HBO Max', 'Apple Music', 'YouTube Music', 'Spotify', 'SoundCloud', 'CapCut', 'OBS', 'NVIDIA', 'AMD', 'Intel', 'Qualcomm', 'Cisco', 'Huawei', 'Samsung', 'Sony', 'LG', 'Tesla', 'SpaceX', 'Uber', 'Airbnb', 'Booking', 'DoorDash', 'Zomato', 'McDonalds', 'Starbucks', 'Nike', 'Adidas', 'Gucci', 'Louis Vuitton', 'Rolex', 'Ferrari', 'BMW', 'Mercedes', 'Toyota', 'Honda', 'Ford', 'Hyundai', 'IKEA', 'Amazon', 'eBay', 'AliExpress', 'Temu', 'Walmart', 'Target', 'Best Buy', 'Logitech', 'Razer', 'Corsair', 'HyperX', 'Alienware', 'MSI', 'ASUS', 'Lenovo', 'Acer', 'HP', 'Dell', 'Synology', 'QNAP', 'VMware', 'VirtualBox', 'TeamViewer', 'AnyDesk', 'FileZilla', 'WinRAR', '7-Zip', 'uTorrent', 'qBittorrent', 'VLC', 'Audacity', 'FL Studio', 'Ableton', 'Logic', 'Cubase', 'Pro Tools', 'Serato', 'GarageBand', 'Mattermost', 'Rocket.Chat', 'Zulip', 'Basecamp', 'Airtable', 'HubSpot', 'Salesforce', 'SAP', 'Oracle', 'ServiceNow', 'Zendesk', 'Intercom', 'Twilio', 'SendGrid', 'Mailchimp', 'Postman', 'Grafana', 'Prometheus', 'ElasticSearch', 'Kibana', 'Splunk', 'Datadog', 'New Relic', 'PagerDuty', 'Sentry', 'CrowdStrike', 'SentinelOne', 'Palo Alto', 'Fortinet', 'Sophos', 'Check Point', 'ZeroDays'];
+
+    const locations = [
+        "Kabul, AF", "Tirana, AL", "Algiers, DZ", "Andorra la Vella, AD", "Luanda, AO",
+        "Saint John's, AG", "Buenos Aires, AR", "Yerevan, AM", "Canberra, AU", "Vienna, AT",
+        "Baku, AZ", "Nassau, BS", "Manama, BH", "Dhaka, BD", "Bridgetown, BB",
+        "Minsk, BY", "Brussels, BE", "Belmopan, BZ", "Porto-Novo, BJ", "Hamilton, BM",
+        "Thimphu, BT", "Sucre, BO", "Sarajevo, BA", "Gaborone, BW", "Brasilia, BR",
+        "Bandar Seri Begawan, BN", "Sofia, BG", "Ouagadougou, BF", "Bujumbura, BI",
+        "Praia, CV", "Phnom Penh, KH", "Yaounde, CM", "Ottawa, CA", "George Town, KY",
+        "Bangui, CF", "N'Djamena, TD", "Santiago, CL", "Beijing, CN", "Bogota, CO",
+        "Moroni, KM", "Brazzaville, CG", "Kinshasa, CD", "San Jose, CR", "Yamoussoukro, CI",
+        "Zagreb, HR", "Havana, CU", "Nicosia, CY", "Prague, CZ", "Copenhagen, DK",
+        "Djibouti, DJ", "Roseau, DM", "Santo Domingo, DO", "Quito, EC", "Cairo, EG",
+        "San Salvador, SV", "Malabo, GQ", "Asmara, ER", "Tallinn, EE", "Mbabane, SZ",
+        "Addis Ababa, ET", "Suva, FJ", "Helsinki, FI", "Paris, FR", "Libreville, GA",
+        "Banjul, GM", "Tbilisi, GE", "Berlin, DE", "Accra, GH", "Athens, GR",
+        "Saint George's, GD", "Guatemala City, GT", "Conakry, GN", "Bissau, GW",
+        "Georgetown, GY", "Port-au-Prince, HT", "Vatican City, VA", "Tegucigalpa, HN",
+        "Budapest, HU", "Reykjavik, IS", "New Delhi, IN", "Jakarta, ID", "Tehran, IR",
+        "Baghdad, IQ", "Dublin, IE", "Jerusalem, IL", "Rome, IT", "Kingston, JM",
+        "Tokyo, JP", "Amman, JO", "Nur-Sultan, KZ", "Nairobi, KE", "Tarawa, KI",
+        "Pyongyang, KP", "Seoul, KR", "Kuwait City, KW", "Bishkek, KG", "Vientiane, LA",
+        "Riga, LV", "Beirut, LB", "Maseru, LS", "Monrovia, LR", "Tripoli, LY",
+        "Vaduz, LI", "Vilnius, LT", "Luxembourg, LU", "Antananarivo, MG", "Lilongwe, MW",
+        "Kuala Lumpur, MY", "Male, MV", "Bamako, ML", "Valletta, MT", "Majuro, MH",
+        "Nouakchott, MR", "Port Louis, MU", "Mexico City, MX", "Palikir, FM",
+        "Chisinau, MD", "Monaco, MC", "Ulaanbaatar, MN", "Podgorica, ME", "Rabat, MA",
+        "Maputo, MZ", "Naypyidaw, MM", "Windhoek, NA", "Yaren, NR", "Kathmandu, NP",
+        "Amsterdam, NL", "Wellington, NZ", "Managua, NI", "Niamey, NE", "Abuja, NG",
+        "Skopje, MK", "Oslo, NO", "Muscat, OM", "Islamabad, PK", "Ngerulmud, PW",
+        "Panama City, PA", "Port Moresby, PG", "Asuncion, PY", "Lima, PE", "Manila, PH",
+        "Warsaw, PL", "Lisbon, PT", "Doha, QA", "Bucharest, RO", "Moscow, RU",
+        "Kigali, RW", "Basseterre, KN", "Castries, LC", "Kingstown, VC", "Apia, WS",
+        "San Marino, SM", "Sao Tome, ST", "Riyadh, SA", "Dakar, SN", "Belgrade, RS",
+        "Victoria, SC", "Freetown, SL", "Singapore, SG", "Bratislava, SK", "Ljubljana, SI",
+        "Honiara, SB", "Mogadishu, SO", "Pretoria, ZA", "Juba, SS", "Madrid, ES",
+        "Sri Jayawardenepura Kotte, LK", "Khartoum, SD", "Paramaribo, SR", "Stockholm, SE",
+        "Bern, CH", "Damascus, SY", "Taipei, TW", "Dushanbe, TJ", "Dodoma, TZ",
+        "Bangkok, TH", "Dili, TL", "Lome, TG", "Nuku'alofa, TO", "Port of Spain, TT",
+        "Tunis, TN", "Ankara, TR", "Ashgabat, TM", "Kampala, UG", "Kyiv, UA",
+        "Abu Dhabi, AE", "London, GB", "Washington D.C., US", "Montevideo, UY",
+        "Tashkent, UZ", "Port Vila, VU", "Caracas, VE", "Hanoi, VN", "Sana'a, YE",
+        "Lusaka, ZM", "Harare, ZW"
+    ];
+
+    /* --- STATE & INIT --- */
+    const state = {
+        startTime: Date.now(),
+        trafficIn: 0,
+        trafficOut: 0,
+        packets: [],
+        logs: [],
+        notifications: [],
+        hosts: [],
+        services: [],
+        programs: [],
+        graphData: { in: [], out: [] },
+        matrixItems: [],
+        mapNodes: [],
+        keylogVisible: true
+    };
+
+    /* --- CORE FUNCTIONS --- */
+
+    function init() {
+        // Map Nodes
+        state.mapNodes = countries.map(c => ({ ...c, active: Math.random() > 0.8, traffic: 0 }));
+        renderMap();
+        
+        // Matrix Initial
+        for(let i=0; i<20; i++) addMatrixItem();
+
+        // Start Loops
+        setInterval(tick, 1000); // Main Data Loop
+        setInterval(keylogTick, 150); // Fast Keylogger
+        requestAnimationFrame(drawGraphLoop); // Smooth Graphics
+    }
+
+    function tick() {
+        const now = Date.now();
+        
+        // 1. Traffic Simulation
+        const conn = navigator.connection || { effectiveType: '4g', downlink: 10 };
+        let maxRate = 5; // MB/s base
+        if(conn.effectiveType === '3g') maxRate = 1.5;
+        if(conn.effectiveType === '2g') maxRate = 0.5;
+        
+        const rateIn = Math.random() * maxRate;
+        const rateOut = Math.random() * (maxRate * 0.4);
+        
+        state.trafficIn += rateIn;
+        state.trafficOut += rateOut;
+        
+        // Push to graph data
+        state.graphData.in.push(rateIn);
+        state.graphData.out.push(rateOut);
+        if(state.graphData.in.length > 60) { state.graphData.in.shift(); state.graphData.out.shift(); }
+
+        // 2. Update DOM Stats
+        document.getElementById('trafficTotal').innerText = (state.trafficIn + state.trafficOut).toFixed(1) + " MB";
+
+        // 3. Update Map
+        updateMapNodes();
+
+        // 4. Update Matrix
+        if(Math.random() > 0.3) addMatrixItem();
+
+        // 5. Update WhatsApp
+        updateWhatsApp(now, rateIn + rateOut);
+
+        // 6. Update Lists (Hosts/Services)
+        if(Math.random() > 0.7) updateLists();
+        
+        // 7. Add Packet to Inspect
+        addPacket();
+
+        // 8. Random Notification
+        if(Math.random() > 0.98) addNotification();
+    }
+
+    /* --- VISUALIZATIONS --- */
+
+    function drawGraphLoop() {
+        const cIn = document.getElementById('graphIn');
+        const cOut = document.getElementById('graphOut');
+        
+        if(cIn && cOut) {
+            // Resize
+            cIn.width = cIn.parentElement.clientWidth;
+            cIn.height = cIn.parentElement.clientHeight;
+            cOut.width = cOut.parentElement.clientWidth;
+            cOut.height = cOut.parentElement.clientHeight;
+
+            drawCanvas(cIn, state.graphData.in, '#eab308');
+            drawCanvas(cOut, state.graphData.out, '#3b82f6');
+        }
+        requestAnimationFrame(drawGraphLoop);
+    }
+
+    function drawCanvas(canvas, data, color) {
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.clearRect(0,0,w,h);
+        
+        if(data.length < 2) return;
+        
+        // Max Y
+        const max = Math.max(...data, 5);
+        const step = w / (data.length - 1);
+        
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for(let i=0; i<data.length; i++) {
+            const x = i * step;
+            const y = h - ((data[i] / max) * (h * 0.8));
+            ctx.lineTo(x, y);
+        }
+        ctx.lineTo(w, h);
+        ctx.closePath();
+        
+        // Gradient Fill
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, color);
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.globalAlpha = 0.4;
+        ctx.fill();
+        
+        // Line
+        ctx.beginPath();
+        for(let i=0; i<data.length; i++) {
+            const x = i * step;
+            const y = h - ((data[i] / max) * (h * 0.8));
+            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 1.0;
+        ctx.stroke();
+    }
+
+    /* --- MATRIX & MAP LOGIC --- */
+
+    function addMatrixItem() {
+        const c = countries[Math.floor(Math.random() * countries.length)];
+        const id = Math.floor(Math.random() * 99999);
+        const active = Math.random() > 0.5;
+        const div = document.createElement('div');
+        div.className = `matrix-cell ${active ? 'active' : 'standby'}`;
+        div.innerHTML = `<span>${c.code} #${id}</span> <span>${active ? 'CONN' : 'WAIT'}</span>`;
+        
+        const grid = document.getElementById('matrixGrid');
+        grid.insertBefore(div, grid.firstChild);
+        if(grid.children.length > 30) grid.removeChild(grid.lastChild);
+    }
+
+    function renderMap() {
+        const grid = document.getElementById('mapGrid');
+        grid.innerHTML = '';
+        state.mapNodes.forEach(node => {
+            const div = document.createElement('div');
+            div.className = `map-node ${node.active ? 'active' : ''}`;
+            div.id = `node-${node.code}`;
+            div.innerHTML = `<span>${node.code}</span>`;
+            grid.appendChild(div);
+        });
+    }
+
+    function updateMapNodes() {
+        // Randomly flip some nodes
+        const count = Math.floor(Math.random() * 5);
+        for(let i=0; i<count; i++) {
+            const idx = Math.floor(Math.random() * state.mapNodes.length);
+            const node = state.mapNodes[idx];
+            node.active = !node.active;
+            
+            const el = document.getElementById(`node-${node.code}`);
+            if(el) {
+                if(node.active) {
+                    el.classList.add('active', 'pulse');
+                    el.style.borderColor = 'var(--bar-out)';
+                } else {
+                    el.classList.remove('active', 'pulse');
+                    el.style.borderColor = '#334155';
+                }
+            }
+        }
+    }
+
+    /* --- LIST UPDATES --- */
+
+    function updateLists() {
+        // Host
+        if(Math.random() > 0.5) {
+            const flag = flags[Math.floor(Math.random() * flags.length)];
+            const svc = services[Math.floor(Math.random() * services.length)];
+            const ip = `192.168.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
+            state.hosts.unshift({ icon: flag, text: `${svc} (${ip})`, size: (Math.random()*10).toFixed(1), bar: Math.random()*100 });
+            if(state.hosts.length > 20) state.hosts.pop();
+            renderList('hostsList', state.hosts, '#eab308');
+        }
+        
+        // Services
+        if(Math.random() > 0.5) {
+            const svc = services[Math.floor(Math.random() * services.length)];
+            state.services.unshift({ icon: '🌐', text: svc, size: (Math.random()*5).toFixed(1), bar: Math.random()*100 });
+            if(state.services.length > 15) state.services.pop();
+            renderList('servicesList', state.services, '#3b82f6');
+        }
+        
+        // Programs
+        if(Math.random() > 0.5) {
+            const apps = ['Chrome', 'Finder', 'Spotify', 'VS Code', 'Terminal', 'Slack'];
+            const app = apps[Math.floor(Math.random() * apps.length)];
+            state.programs.unshift({ icon: app[0], text: app, size: (Math.random()*20).toFixed(1), bar: Math.random()*100 });
+            if(state.programs.length > 15) state.programs.pop();
+            renderList('programsList', state.programs, '#ef4444');
+        }
+    }
+
+    function renderList(id, data, color) {
+        const el = document.getElementById(id);
+        let html = '';
+        data.forEach(item => {
+            html += `<div class="split-row">
+                <div class="split-icon">${item.icon}</div>
+                <div class="split-info">${item.text}</div>
+                <div class="split-bar"><div class="split-bar-fill" style="width:${item.bar}%; background:${color}"></div></div>
+                <div class="split-val">${item.size} MB</div>
+            </div>`;
+        });
+        el.innerHTML = html;
+    }
+
+    /* --- WHATSAPP & LOGS --- */
+
+    function updateWhatsApp(now, traffic) {
+        const loc = locations[Math.floor(Math.random() * locations.length)];
+        const parts = loc.split(', ');
+        const code = parts[parts.length-1];
+        const country = countries.find(c => c.code === code) || countries[0];
+        const phone = country.dial + " " + (Math.floor(Math.random()*90000000)+10000000);
+        const conn = ['5G', '4G', 'Wi-Fi 6'][Math.floor(Math.random()*3)];
+
+        document.getElementById('waLoc').innerText = loc;
+        document.getElementById('waPhone').innerText = phone;
+        document.getElementById('waConn').innerText = conn;
+        document.getElementById('waSync').innerText = new Date(now).toLocaleTimeString();
+
+        // Log entry
+        const log = {
+            time: new Date(now).toLocaleTimeString(),
+            location: loc,
+            phone: phone,
+            connection: conn,
+            traffic: traffic.toFixed(2)
+        };
+        state.logs.unshift(log);
+        if(state.logs.length > 500) state.logs.pop();
+        
+        // Only render logs table if tab is visible to save CPU
+        if(!document.getElementById('tab-logs').classList.contains('hidden')) {
+            renderLogsTable();
+        }
+    }
+
+    function renderLogsTable() {
+        const tbody = document.getElementById('logsBody');
+        document.getElementById('logCount').innerText = state.logs.length;
+        let html = '';
+        state.logs.slice(0, 100).forEach(l => {
+            html += `<tr>
+                <td class="col-mono" style="color:var(--accent)">${l.time}</td>
+                <td>${l.location}</td>
+                <td class="col-mono">${l.phone}</td>
+                <td>${l.connection}</td>
+                <td class="col-mono">${l.traffic}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function downloadLogs() {
+        if(state.logs.length === 0) return alert("No logs to export");
+        let csv = "Time,Location,Phone,Connection,Traffic\n";
+        state.logs.forEach(l => {
+            csv += `${l.time},"${l.location}",${l.phone},${l.connection},${l.traffic}\n`;
+        });
+        const a = document.createElement('a');
+        a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+        a.download = 'zerodays_logs.csv';
+        a.click();
+    }
+
+    function clearLogs() {
+        if(confirm("Clear all logs?")) {
+            state.logs = [];
+            renderLogsTable();
+        }
+    }
+
+    /* --- INSPECT TABLE --- */
+
+    function addPacket() {
+        const p = {
+            src: `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`,
+            sp: 443 + Math.floor(Math.random()*1000),
+            dst: `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`,
+            dp: 60000 + Math.floor(Math.random()*5000),
+            proto: Math.random() > 0.5 ? 'TCP' : 'UDP',
+            svc: ['https', 'http', 'ssh', 'domain'][Math.floor(Math.random()*4)],
+            bytes: Math.floor(Math.random()*1500)
+        };
+        state.packets.unshift(p);
+        if(state.packets.length > 200) state.packets.pop();
+
+        if(!document.getElementById('tab-inspect').classList.contains('hidden')) {
+            renderInspectTable();
+        }
+    }
+
+    function renderInspectTable() {
+        const fSrc = document.getElementById('fSource').value.toLowerCase();
+        const fDst = document.getElementById('fDest').value.toLowerCase();
+        const fProto = document.getElementById('fProto').value.toLowerCase();
+        const fSvc = document.getElementById('fSvc').value.toLowerCase();
+
+        const tbody = document.getElementById('inspectBody');
+        let html = '';
+        let count = 0;
+
+        for(let p of state.packets) {
+            if(fSrc && !p.src.includes(fSrc)) continue;
+            if(fDst && !p.dst.includes(fDst)) continue;
+            if(fProto && !p.proto.toLowerCase().includes(fProto)) continue;
+            if(fSvc && !p.svc.includes(fSvc)) continue;
+
+            html += `<tr>
+                <td class="col-mono" style="color:var(--accent)">${p.src}</td>
+                <td class="col-mono">${p.sp}</td>
+                <td class="col-mono" style="color:var(--bar-out)">${p.dst}</td>
+                <td class="col-mono">${p.dp}</td>
+                <td>${p.proto}</td>
+                <td>${p.svc}</td>
+                <td class="col-mono" style="text-align:right">${p.bytes}</td>
+            </tr>`;
+            count++;
+            if(count > 100) break; // Limit render
+        }
+        tbody.innerHTML = html;
+        document.getElementById('inspectStats').innerText = `Showing ${count} packets (Total Buffer: ${state.packets.length})`;
+    }
+
+    /* --- KEYLOGGER & NOTIFICATIONS --- */
+
+    function keylogTick() {
+        if(!state.keylogVisible) return;
+        const keys = ['a','s','d','f','g','Enter','Shift','Ctrl','Alt','Space'];
+        const k = keys[Math.floor(Math.random()*keys.length)];
+        const time = new Date().toLocaleTimeString();
+        const line = `[${time}] KEY_PRESS: ${k} [PID:${Math.floor(Math.random()*9000)+1000}]\n`;
+        const box = document.getElementById('keylogBox');
+        
+        // Fixed: Use appendChild/insertBefore for DOM performance if needed, 
+        // but textContent is fine if we trim it properly.
+        
+        // To keep the scroll at bottom, we add text, then set scrollTop
+        box.textContent += line;
+        
+        // Force scroll to bottom
+        box.scrollTop = box.scrollHeight;
+
+        // Trim text to prevent memory bloat
+        if(box.textContent.length > 5000) {
+            box.textContent = box.textContent.slice(box.textContent.length - 3000);
+            box.scrollTop = box.scrollHeight; // Reset scroll position after trim
+        }
+    }
+
+    function toggleKeylog() {
+        state.keylogVisible = !state.keylogVisible;
+        const box = document.getElementById('keylogBox');
+        const btn = document.querySelector('.key-header button');
+        
+        if(state.keylogVisible) {
+            box.style.display = 'block';
+            btn.innerText = "HIDE";
+        } else {
+            box.style.display = 'none';
+            btn.innerText = "SHOW";
+        }
+    }
+
+    function addNotification() {
+        const msgs = ["New data exchange from favorites", "Threshold exceeded (10MB/s)", "Unknown IP detected", "Geolocation sync complete"];
+        const msg = msgs[Math.floor(Math.random()*msgs.length)];
+        const div = document.createElement('div');
+        div.style.cssText = "background:rgba(0,0,0,0.3); padding:10px; border-left:3px solid var(--accent); font-size:12px; display:flex; justify-content:space-between; animation:slideIn 0.3s;";
+        div.innerHTML = `<span>${msg}</span> <span style="color:var(--text-muted); font-size:10px;">${new Date().toLocaleTimeString()}</span>`;
+        
+        const list = document.getElementById('notifList');
+        list.prepend(div);
+        if(list.children.length > 20) list.removeChild(list.lastChild);
+        
+        const badge = document.getElementById('notifBadge');
+        badge.innerText = list.children.length;
+    }
+
+    /* --- UTILS --- */
+
+    function switchTab(id) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+        document.getElementById('tab-'+id).classList.remove('hidden');
+        
+        const status = document.getElementById('headerStatus');
+        status.innerText = id.toUpperCase();
+        
+        // Trigger renders for hidden tabs to ensure data is fresh
+        if(id === 'logs') renderLogsTable();
+        if(id === 'inspect') renderInspectTable();
+    }
+
+    function resetTraffic() {
+        state.trafficIn = 0;
+        state.trafficOut = 0;
+        state.graphData.in = [];
+        state.graphData.out = [];
+        state.logs = [];
+        state.packets = [];
+        // UI feedback
+        const btn = document.querySelector('button[onclick="resetTraffic()"]');
+        const orig = btn.innerHTML;
+        btn.innerHTML = "✓";
+        setTimeout(() => btn.innerHTML = orig, 1000);
+    }
+
+    // CSS Animation injection
+    const style = document.createElement('style');
+    style.innerHTML = `@keyframes slideIn { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:translateX(0); } }`;
+    document.head.appendChild(style);
+
+    // Boot
+    window.addEventListener('load', init);
+
+</script>
+</body>
+</html>
